@@ -1,0 +1,164 @@
+Geography,Council type,Council region,LA Code ,ONS Area Code
+England,,,,E92000001
+North East,,North East,NE,E12000001
+Darlington,Unitary Authority,North East,117,E06000005
+County Durham,Unitary Authority,North East,116,E06000047
+Gateshead,Metropolitan District,North East,106,E08000037
+Hartlepool,Unitary Authority,North East,111,E06000001
+Middlesbrough,Unitary Authority,North East,112,E06000002
+Newcastle upon Tyne,Metropolitan District,North East,107,E08000021
+North Tyneside,Metropolitan District,North East,108,E08000022
+Northumberland,Unitary Authority,North East,104,E06000057
+Redcar and Cleveland,Unitary Authority,North East,113,E06000003
+South Tyneside,Metropolitan District,North East,109,E08000023
+Stockton-on-Tees,Unitary Authority,North East,114,E06000004
+Sunderland,Metropolitan District,North East,110,E08000024
+North West,,North West,NW,E12000002
+Blackburn with Darwen,Unitary Authority,North West,324,E06000008
+Blackpool,Unitary Authority,North West,325,E06000009
+Bolton,Metropolitan District,North West,304,E08000001
+Bury,Metropolitan District,North West,305,E08000002
+Cheshire East,Unitary Authority,North West,326,E06000049
+Cheshire West and Chester,Unitary Authority,North West,327,E06000050
+Cumberland ,Unitary Authority,North West,H6X4G,E06000063
+Westmorland and Furness,Unitary Authority,North West,W8X1Q,E06000064
+Halton,Unitary Authority,North West,321,E06000006
+Knowsley,Metropolitan District,North West,315,E08000011
+Lancashire,Shire Counties,North West,323,E10000017
+Liverpool,Metropolitan District,North West,316,E08000012
+Manchester,Metropolitan District,North West,306,E08000003
+Oldham,Metropolitan District,North West,307,E08000004
+Rochdale,Metropolitan District,North West,308,E08000005
+Salford,Metropolitan District,North West,309,E08000006
+Sefton,Metropolitan District,North West,317,E08000014
+St. Helens,Metropolitan District,North West,318,E08000013
+Stockport,Metropolitan District,North West,310,E08000007
+Tameside,Metropolitan District,North West,311,E08000008
+Trafford,Metropolitan District,North West,312,E08000009
+Warrington,Unitary Authority,North West,322,E06000007
+Wigan,Metropolitan District,North West,313,E08000010
+Wirral,Metropolitan District,North West,319,E08000015
+Yorkshire and the Humber,,Yorkshire and The Humber,YH,E12000003
+Barnsley,Metropolitan District,Yorkshire and The Humber,204,E08000016
+Bradford,Metropolitan District,Yorkshire and The Humber,209,E08000032
+Calderdale,Metropolitan District,Yorkshire and The Humber,210,E08000033
+Doncaster,Metropolitan District,Yorkshire and The Humber,205,E08000017
+East Riding of Yorkshire,Unitary Authority,Yorkshire and The Humber,214,E06000011
+"Kingston upon Hull, City of Port",Unitary Authority,Yorkshire and The Humber,215,E06000010
+Kirklees,Metropolitan District,Yorkshire and The Humber,211,E08000034
+Leeds,Metropolitan District,Yorkshire and The Humber,212,E08000035
+North East Lincolnshire,Unitary Authority,Yorkshire and The Humber,216,E06000012
+North Lincolnshire,Unitary Authority,Yorkshire and The Humber,217,E06000013
+North Yorkshire,Shire Counties,Yorkshire and The Humber,218,E06000065
+Rotherham,Metropolitan District,Yorkshire and The Humber,206,E08000018
+Sheffield,Metropolitan District,Yorkshire and The Humber,207,E08000019
+Wakefield,Metropolitan District,Yorkshire and The Humber,213,E08000036
+York,Unitary Authority,Yorkshire and The Humber,219,E06000014
+East Midlands,,East Midlands,EM,E12000004
+Derby,Unitary Authority,East Midlands,507,E06000015
+Derbyshire,Shire Counties,East Midlands,506,E10000007
+Leicester,Unitary Authority,East Midlands,509,E06000016
+Leicestershire,Shire Counties,East Midlands,508,E10000018
+Lincolnshire,Shire Counties,East Midlands,503,E10000019
+North Northamptonshire,Unitary Authority,East Midlands,Z9D4Z,E06000061
+Nottingham,Unitary Authority,East Midlands,512,E06000018
+Nottinghamshire,Shire Counties,East Midlands,511,E10000024
+Rutland,Unitary Authority,East Midlands,510,E06000017
+West Northamptonshire,Unitary Authority,East Midlands,U6Q5Z,E06000062
+West Midlands,,West Midlands,WM,E12000005
+Birmingham,Metropolitan District,West Midlands,406,E08000025
+Coventry,Metropolitan District,West Midlands,407,E08000026
+Dudley,Metropolitan District,West Midlands,408,E08000027
+"Herefordshire, County of Hereford and Worcester",Unitary Authority,West Midlands,415,E06000019
+Sandwell,Metropolitan District,West Midlands,409,E08000028
+Shropshire,Unitary Authority,West Midlands,417,E06000051
+Solihull,Metropolitan District,West Midlands,410,E08000029
+Staffordshire,Shire Counties,West Midlands,413,E10000028
+Stoke-on-Trent,Unitary Authority,West Midlands,414,E06000021
+Telford and Wrekin,Unitary Authority,West Midlands,418,E06000020
+Walsall,Metropolitan District,West Midlands,411,E08000030
+Warwickshire,Shire Counties,West Midlands,404,E10000031
+Wolverhampton,Metropolitan District,West Midlands,412,E08000031
+Worcestershire,Shire Counties,West Midlands,416,E10000034
+East of England,,East of England,E,E12000006
+Bedford,Unitary Authority,East of England,625,E06000055
+Cambridgeshire,Shire Counties,East of England,623,E10000003
+Central Bedfordshire,Unitary Authority,East of England,626,E06000056
+Essex,Shire Counties,East of England,620,E10000012
+Hertfordshire,Shire Counties,East of England,606,E10000015
+Luton,Unitary Authority,East of England,611,E06000032
+Norfolk,Shire Counties,East of England,607,E10000020
+Peterborough,Unitary Authority,East of England,624,E06000031
+Southend-on-Sea,Unitary Authority,East of England,621,E06000033
+Suffolk,Shire Counties,East of England,609,E10000029
+Thurrock,Unitary Authority,East of England,622,E06000034
+London,,London,L,E12000007
+Barking and Dagenham,Outer London,London,716,E09000002
+Barnet,Outer London,London,717,E09000003
+Bexley,Outer London,London,718,E09000004
+Brent,Outer London,London,719,E09000005
+Bromley,Outer London,London,720,E09000006
+Camden,Inner London,London,702,E09000007
+City of London,Inner London,London,714,E09000001
+Croydon,Outer London,London,721,E09000008
+Ealing,Outer London,London,722,E09000009
+Enfield,Outer London,London,723,E09000010
+Greenwich,Inner London,London,703,E09000011
+Hackney,Inner London,London,704,E09000012
+Hammersmith and Fulham,Inner London,London,705,E09000013
+Haringey,Outer London,London,724,E09000014
+Harrow,Outer London,London,725,E09000015
+Havering,Outer London,London,726,E09000016
+Hillingdon,Outer London,London,727,E09000017
+Hounslow,Outer London,London,728,E09000018
+Islington,Inner London,London,706,E09000019
+Kensington and Chelsea,Inner London,London,707,E09000020
+Kingston upon Thames,Outer London,London,729,E09000021
+Lambeth,Inner London,London,708,E09000022
+Lewisham,Inner London,London,709,E09000023
+Merton,Outer London,London,730,E09000024
+Newham,Outer London,London,731,E09000025
+Redbridge,Outer London,London,732,E09000026
+Richmond upon Thames,Outer London,London,733,E09000027
+Southwark,Inner London,London,710,E09000028
+Sutton,Outer London,London,734,E09000029
+Tower Hamlets,Inner London,London,711,E09000030
+Waltham Forest,Outer London,London,735,E09000031
+Wandsworth,Inner London,London,712,E09000032
+Westminster,Inner London,London,713,E09000033
+South East,,South East,SE,E12000008
+Bracknell Forest,Unitary Authority,South East,614,E06000036
+Brighton and Hove,Unitary Authority,South East,816,E06000043
+Buckinghamshire,Unitary Authority,South East,916,E06000060
+East Sussex,Shire Counties,South East,815,E10000011
+Hampshire,Shire Counties,South East,812,E10000014
+Isle of Wight,Unitary Authority,South East,803,E06000046
+Kent,Shire Counties,South East,820,E10000016
+Medway,Unitary Authority,South East,821,E06000035
+Milton Keynes,Unitary Authority,South East,613,E06000042
+Oxfordshire,Shire Counties,South East,608,E10000025
+Portsmouth,Unitary Authority,South East,813,E06000044
+Reading,Unitary Authority,South East,616,E06000038
+Slough,Unitary Authority,South East,617,E06000039
+Southampton,Unitary Authority,South East,814,E06000045
+Surrey,Shire Counties,South East,805,E10000030
+West Berkshire,Unitary Authority,South East,615,E06000037
+West Sussex,Shire Counties,South East,807,E10000032
+Windsor and Maidenhead,Unitary Authority,South East,618,E06000040
+Wokingham,Unitary Authority,South East,619,E06000041
+South West,,South West,SW,E12000009
+Bath and North East Somerset,Unitary Authority,South West,908,E06000022
+"Bournemouth, Christchurch and Poole",Unitary Authority,South West,738,E06000058
+"Bristol, City of River Avon",Unitary Authority,South West,909,E06000023
+Cornwall,Unitary Authority,South West,902,E06000052
+Devon,Shire Counties,South West,912,E10000008
+Dorset,Unitary Authority,South West,809,E06000059
+Gloucestershire,Shire Counties,South West,904,E10000013
+Isles of Scilly,Unitary Authority,South West,906,E06000053
+North Somerset,Unitary Authority,South West,910,E06000024
+Plymouth,Unitary Authority,South West,913,E06000026
+Somerset,Shire Counties,South West,905,E06000066
+South Gloucestershire,Unitary Authority,South West,911,E06000025
+Swindon,Unitary Authority,South West,819,E06000030
+Torbay,Unitary Authority,South West,914,E06000027
+Wiltshire,Unitary Authority,South West,817,E06000054
