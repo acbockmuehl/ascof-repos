@@ -108,6 +108,8 @@ def la_outcomes():
     table_df = table_df[['Geographical Description', 'Measure Group Description', 'Measure_Value', 'Percentile', 'Direction']]
     return jsonify(table_df.to_dict(orient='records'))
 
+# Functions Jack added 10/05 - used by Council Summary Generator in index.html (currently commented out)
+
 def generate_summary_for_council(council_name: str):
     selected_council_df = df[
         (df['Geographical Description'] == council_name) & 
@@ -215,7 +217,7 @@ def generate_nlg_summary(comparison_df, council_name):
         summary += f"Areas for improvement include {format_list(top_weaknesses)}.\n"
 
     print("Performance Summary:")
-    print(summary)
+    # print(summary)
     return summary
 
 def generate_mistral_summary(comparison_df, council_name):
@@ -278,4 +280,5 @@ def mistral_summary_route():
 if __name__ == '__main__':
     # commparison_data = generate_summary_for_council("Kent")
     # generate_mistral_summary(commparison_data, "Kent")
+    print('Hello world!')
     app.run(debug=True)
