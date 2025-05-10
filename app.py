@@ -1,58 +1,40 @@
-# app.py
 from flask import Flask, render_template, request, jsonify
 import pandas as pd
 
 app = Flask(__name__)
 
-# Load data
+# Load raw data
 measures_df = pd.read_csv('data/measures.csv')
 ons_df = pd.read_csv('data/ons_codes.csv')
-direction_df = pd.read_csv('data/measure_direction.csv')
+direction_df = pd.read_csv('data/measure_direction.csv')  # contains 'Measure Group Description', 'Direction'
 
-# Filter outcome measures at council level
+# Preprocess
 df = measures_df[
     (measures_df["Geographical Level"] == "Council") &
     (measures_df["Measure Type"] == "Outcome")
 ].copy()
-df = df.merge(ons_df, how='left', left_on='ONS Code', right_on='ONS Area Code')
+
 df['Measure_Value'] = pd.to_numeric(df['Measure_Value'], errors='coerce')
-df = df.merge(direction_df, on='Measure Group Description', how='left')
-df = df.dropna(subset=['Measure_Value', 'Measure Group Description'])
+df = df.dropna(subset=['Measure_Value'])
 
-# Add percentiles per group
-def calc_percentiles(group):
-    ascending = (group['Direction'].iloc[0] == "Lower is better")
-    group['Percentile'] = group['Measure_Value'].rank(pct=True, ascending=ascending) * 100
-    return group
+# Collapse to 1 row per LA + measure group (avg or first as appropriate)
+df = df.groupby(['ONS Code', 'Geographical Description', 'Measure Group Description']).agg({
+    'Measure_Value': 'mean',
+    'Disaggregation Level': 'first',
+    'Measure Group': 'first'
+}).reset_index()
 
-df_outcomes = df.groupby('Measure Group Description', group_keys=False).apply(calc_percentiles)
+# Merge ONS info and directions
+df = df.merge(ons_df, how='left', left_on='ONS Code', right_on='ONS Area Code')
+df = df.merge(direction_df, how='left', on='Measure Group Description')
 
-# England-level fallback
-df_eng = measures_df[
-    (measures_df["Geographical Level"] == "Country") &
-    (measures_df["Geographical Description"] == "England") &
-    (measures_df["Measure Type"] == "Outcome")
-].copy()
-df_eng['Measure_Value'] = pd.to_numeric(df_eng['Measure_Value'], errors='coerce')
-df_eng = df_eng.merge(direction_df, on='Measure Group Description', how='left')
-df_eng = df_eng.merge(
-    df_outcomes.groupby('Measure Group Description')[['Measure_Value']].median().rename(columns={'Measure_Value': 'Median'}),
-    left_on='Measure Group Description', right_index=True, how='left'
-)
-df_eng['Percentile'] = df_eng.apply(
-    lambda row: (df_outcomes[df_outcomes['Measure Group Description'] == row['Measure Group Description']]['Measure_Value']
-                 .lt(row['Measure_Value']).mean() * 100)
-    if row['Direction'] == "Lower is better"
-    else (df_outcomes[df_outcomes['Measure Group Description'] == row['Measure Group Description']]['Measure_Value']
-          .le(row['Measure_Value']).mean() * 100),
-    axis=1
-)
+df_outcomes = df  # used throughout app
 
 @app.route('/')
 def index():
-    measure_groups = sorted(df['Measure Group Description'].dropna().unique())
-    regions = sorted(df['Council region'].dropna().unique())
-    disaggregations = sorted(df['Disaggregation Level'].dropna().unique())
+    measure_groups = sorted(df_outcomes['Measure Group Description'].dropna().unique())
+    regions = sorted(df_outcomes['Council region'].dropna().unique())
+    disaggregations = sorted(df_outcomes['Disaggregation Level'].dropna().unique())
     return render_template('index.html', measure_groups=measure_groups, regions=regions, disaggregations=disaggregations)
 
 @app.route('/pareto-data')
@@ -72,13 +54,16 @@ def pareto_data():
     if selected_disagg:
         filtered = filtered[filtered['Disaggregation Level'] == selected_disagg]
 
+    filtered = filtered.dropna(subset=['Measure_Value'])
+
     agg = (
-        filtered.groupby('Geographical Description')[['Measure_Value']].sum()
-        .sort_values(ascending=False, by='Measure_Value')
+        filtered.groupby('Geographical Description')['Measure_Value']
+        .sum()
+        .sort_values(ascending=False)
         .reset_index()
     )
-    merged = agg.merge(filtered[['Geographical Description', 'Percentile']].drop_duplicates(), on='Geographical Description', how='left')
-    return jsonify(merged.to_dict(orient='records'))
+
+    return jsonify(agg.to_dict(orient='records'))
 
 @app.route('/disaggregation-options')
 def disaggregation_options():
@@ -86,22 +71,84 @@ def disaggregation_options():
     if not selected_measure:
         return jsonify([])
 
-    filtered = df[df['Measure Group Description'] == selected_measure]
+    filtered = df_outcomes[df_outcomes['Measure Group Description'] == selected_measure]
     options = sorted(filtered['Disaggregation Level'].dropna().unique().tolist())
     return jsonify(options)
 
 @app.route('/la-outcomes')
 def la_outcomes():
     la_name = request.args.get('la')
+    base_df = df_outcomes.copy()
 
     if la_name:
-        table_df = df_outcomes[df_outcomes['Geographical Description'] == la_name]
+        subset = base_df[base_df['Geographical Description'].str.strip().str.lower() == la_name.strip().lower()].copy()
     else:
-        table_df = df_eng.copy()
-        table_df['Geographical Description'] = 'England'
+        subset = base_df[base_df['Geographical Description'].str.contains("England", case=False, na=False)].copy()
 
-    table_df = table_df[['Geographical Description', 'Measure Group Description', 'Measure_Value', 'Percentile', 'Direction']]
-    return jsonify(table_df.to_dict(orient='records'))
+    if subset.empty:
+        return jsonify([])
+
+    # National percentile
+    def compute_national_percentile(row):
+        group = base_df[
+            base_df['Measure Group Description'] == row['Measure Group Description']
+        ].dropna(subset=['Measure_Value'])
+
+        if group.empty:
+            return None
+
+        try:
+            value = float(row['Measure_Value'])
+        except (TypeError, ValueError):
+            return None
+
+        if row['Direction'] == "Lower is better":
+            rank = group['Measure_Value'].lt(value).mean()
+        else:
+            rank = group['Measure_Value'].le(value).mean()
+
+        return round(rank * 100, 2)
+
+    # Regional percentile
+    def compute_regional_percentile(row):
+        region = row.get('Council region')
+        if pd.isna(region):
+            return None
+
+        group = base_df[
+            (base_df['Measure Group Description'] == row['Measure Group Description']) &
+            (base_df['Council region'] == region)
+        ].dropna(subset=['Measure_Value'])
+
+        if group.empty:
+            return None
+
+        try:
+            value = float(row['Measure_Value'])
+        except (TypeError, ValueError):
+            return None
+
+        if row['Direction'] == "Lower is better":
+            rank = group['Measure_Value'].lt(value).mean()
+        else:
+            rank = group['Measure_Value'].le(value).mean()
+
+        return round(rank * 100, 2)
+
+    subset['Percentile_National'] = subset.apply(compute_national_percentile, axis=1)
+    subset['Percentile_Regional'] = subset.apply(compute_regional_percentile, axis=1)
+
+    result = subset[[
+        'Measure Group',
+        'Measure Group Description',
+        'Measure_Value',
+        'Percentile_National',
+        'Percentile_Regional',
+        'Direction'
+    ]].copy()
+
+    result.sort_values(by='Measure Group Description', ascending=False, inplace=True)
+    return jsonify(result.to_dict(orient='records'))
 
 if __name__ == '__main__':
     app.run(debug=True)
