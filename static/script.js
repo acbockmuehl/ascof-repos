@@ -82,6 +82,26 @@ function updateDisaggregationOptions(measure) {
       });
   }
 
+function generateSummary() {
+    const council = document.getElementById('councilSelect').value;
+
+    fetch(`/mistral-summary?council=${encodeURIComponent(council)}`)
+      .then(res => res.json())
+      .then(data => {
+        const output = document.getElementById('mistralSummary');
+        if (data.summary) {
+          output.innerText = data.summary;
+        } else {
+          output.innerText = 'No summary generated.';
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        document.getElementById('mistralSummary').innerText = 'An error occurred while generating the summary.';
+      });
+  }
+    
+
 // Event listeners
 document.getElementById('measureSelect').addEventListener('change', function () {
     updateDisaggregationOptions(this.value);
