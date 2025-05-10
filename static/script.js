@@ -116,21 +116,9 @@ function fetchAndRender() {
 
 function updateDisaggregationOptions(measure) {
   fetch(`/disaggregation-options?measure=${encodeURIComponent(measure)}`)
-    .then(res => res.json())
     .then(options => {
-      const disaggSelect = document.getElementById('disaggSelect');
-      disaggSelect.innerHTML = '';
-
-      const hasOptions = options.length > 0;
-
-      if (hasOptions) {
-        options.forEach(opt => {
-          const option = document.createElement('option');
-          option.value = opt;
-          option.textContent = opt;
-          disaggSelect.appendChild(option);
-        });
-
+      // Optional: restore her `hasOptions` check if needed
+      if (options && options.length > 0) {
         disaggSelect.disabled = false;
         disaggSelect.classList.remove('bg-gray-100', 'text-gray-400');
         disaggSelect.classList.add('bg-white');
@@ -152,10 +140,27 @@ function updateDisaggregationOptions(measure) {
         disaggSelect.value = '';
       }
 
-      fetchAndRender();
+      fetchAndRender(); // Refresh chart with new disagg
     });
 }
 
+// Your addition
+function generateSummary() {
+  const council = document.getElementById('councilSelect').value;
+
+  fetch(`/mistral-summary?council=${encodeURIComponent(council)}`)
+    .then(res => res.json())
+    .then(data => {
+      const output = document.getElementById('mistralSummary');
+      if (data.summary) {
+        output.innerText = data.summary;
+      } else {
+        output.innerText = 'No summary available.';
+      }
+    });
+}
+
+// Event listeners
 document.getElementById('measureSelect').addEventListener('change', function () {
   updateDisaggregationOptions(this.value);
 });
