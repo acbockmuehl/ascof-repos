@@ -6,6 +6,7 @@ function fetchAndRender() {
   const regions = Array.from(regionOptions).map(opt => opt.value);
   const disagg = document.getElementById('disaggSelect').value;
 
+  // this is a comment ( Cmd + '/')
   const params = new URLSearchParams();
   params.append('measure', measure);
   params.append('disagg', disagg);

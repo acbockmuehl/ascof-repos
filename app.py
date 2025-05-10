@@ -13,7 +13,7 @@ df = measures_df[
 df = df.merge(ons_df, how='left', left_on='ONS Code', right_on='ONS Area Code')
 
 # Static filter: One specific measure only
-TARGET_MEASURE = "Long-term support needs of younger adults (aged 18-64) met by admission to residential and nursing care homes, per 100,000 population"
+# TARGET_MEASURE = "Long-term support needs of younger adults (aged 18-64) met by admission to residential and nursing care homes, per 100,000 population"
 
 @app.route('/')
 def index():
