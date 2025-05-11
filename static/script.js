@@ -1,4 +1,3 @@
-// script.js
 let chart;
 
 function fetchAndRender() {
@@ -9,7 +8,9 @@ function fetchAndRender() {
 
   const params = new URLSearchParams();
   params.append('measure', measure);
-  params.append('disagg', disagg);
+  if (disagg && disagg !== '') {
+    params.append('disagg', disagg);
+  }
   regions.forEach(r => params.append('regions[]', r));
 
   fetch(`/pareto-data?${params.toString()}`)
@@ -42,10 +43,7 @@ function fetchAndRender() {
 
       new TomSelect('#highlightSelect', {
         create: false,
-        sortField: {
-          field: 'text',
-          direction: 'asc'
-        },
+        sortField: { field: 'text', direction: 'asc' },
         placeholder: 'Select a local authority...'
       });
 
@@ -83,28 +81,17 @@ function fetchAndRender() {
             title: {
               display: true,
               text: measure,
-              font: {
-                size: 16,
-                weight: 'bold'
-              },
-              padding: {
-                bottom: 16
-              }
+              font: { size: 16, weight: 'bold' },
+              padding: { bottom: 16 }
             }
           },
           scales: {
             y: {
               beginAtZero: true,
-              title: {
-                display: true,
-                text: 'Value'
-              }
+              title: { display: true, text: 'Value' }
             },
             x: {
-              title: {
-                display: true,
-                text: 'Council'
-              }
+              title: { display: true, text: 'Council' }
             }
           }
         }
@@ -116,17 +103,32 @@ function fetchAndRender() {
 
 function updateDisaggregationOptions(measure) {
   fetch(`/disaggregation-options?measure=${encodeURIComponent(measure)}`)
+    .then(res => res.json())
     .then(options => {
-      // Optional: restore her `hasOptions` check if needed
+      const disaggSelect = document.getElementById('disaggSelect');
+      disaggSelect.innerHTML = '';
+
       if (options && options.length > 0) {
         disaggSelect.disabled = false;
         disaggSelect.classList.remove('bg-gray-100', 'text-gray-400');
         disaggSelect.classList.add('bg-white');
 
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = '';
+        placeholderOption.textContent = 'Select demographic';
+        disaggSelect.appendChild(placeholderOption);
+
+        options.forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt;
+          option.textContent = opt;
+          disaggSelect.appendChild(option);
+        });
+
         if (options.includes('Total')) {
           disaggSelect.value = 'Total';
         } else {
-          disaggSelect.value = options[0];
+          disaggSelect.value = '';
         }
       } else {
         disaggSelect.disabled = true;
@@ -135,16 +137,15 @@ function updateDisaggregationOptions(measure) {
 
         const option = document.createElement('option');
         option.value = '';
-        option.textContent = 'No data available';
+        option.textContent = 'No disaggregation for this measure';
         disaggSelect.appendChild(option);
         disaggSelect.value = '';
       }
 
-      fetchAndRender(); // Refresh chart with new disagg
+      fetchAndRender();
     });
 }
 
-// Your addition
 function generateSummary() {
   const council = document.getElementById('councilSelect').value;
 
@@ -152,13 +153,125 @@ function generateSummary() {
     .then(res => res.json())
     .then(data => {
       const output = document.getElementById('mistralSummary');
-      if (data.summary) {
-        output.innerText = data.summary;
-      } else {
-        output.innerText = 'No summary available.';
-      }
+      output.innerText = data.summary || 'No summary available.';
     });
 }
+
+// Ordinal suffix helper
+function formatOrdinal(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+// Colour scale from red → amber → green
+function getPercentileColor(percentile, direction) {
+  const scale = direction === "Higher is better"
+    ? percentile / 100
+    : 1 - percentile / 100;
+
+  const interpolateHex = (start, mid, end, t) => {
+    const [r1, g1, b1] = start;
+    const [r2, g2, b2] = mid;
+    const [r3, g3, b3] = end;
+
+    if (t < 0.5) {
+      t *= 2;
+      return `rgb(${Math.round(r1 + (r2 - r1) * t)}, ${Math.round(g1 + (g2 - g1) * t)}, ${Math.round(b1 + (b2 - b1) * t)})`;
+    } else {
+      t = (t - 0.5) * 2;
+      return `rgb(${Math.round(r2 + (r3 - r2) * t)}, ${Math.round(g2 + (g3 - g2) * t)}, ${Math.round(b2 + (b3 - b2) * t)})`;
+    }
+  };
+
+  return interpolateHex([237, 121, 121], [255, 202, 110], [120, 196, 116], scale);
+}
+
+function updateLATable(selectedLA) {
+  const params = new URLSearchParams();
+  if (selectedLA) params.append('la', selectedLA);
+
+  fetch(`/la-outcomes?${params.toString()}`)
+    .then(res => res.json())
+    .then(data => {
+      const container = document.getElementById('laMeasuresTable');
+
+      // 🆕 Only keep rows where Disaggregation Level is "Total" or blank/null
+      const totalOnly = data.filter(row => {
+        const level = row['Disaggregation Level'];
+        return !level || level.trim().toLowerCase() === 'total';
+      });
+
+      if (!totalOnly.length) {
+        container.innerHTML = '<p class="text-gray-600 text-sm">No total-level benchmarking data available for this council.</p>';
+        return;
+      }
+
+      // 🟢 Colour interpolation helpers
+      function interpolateColor(color1, color2, factor) {
+        const c1 = color1.match(/\w\w/g).map(hex => parseInt(hex, 16));
+        const c2 = color2.match(/\w\w/g).map(hex => parseInt(hex, 16));
+        const result = c1.map((v, i) => Math.round(v + factor * (c2[i] - v)));
+        return `rgb(${result[0]}, ${result[1]}, ${result[2]})`;
+      }
+
+      const RED = '#ed7979';
+      const AMBER = '#ffca6e';
+      const GREEN = '#78c474';
+
+      const rows = totalOnly.map(row => {
+        const isProportion = row['Measure Group Description']?.toLowerCase().startsWith('proportion');
+        const value = parseFloat(row['Measure_Value']);
+        const formattedValue = isProportion
+          ? `${Math.round(value)}%`
+          : value.toFixed(2);
+
+        const percentile = Math.round(row['Percentile_National']) || 0;
+        const direction = row['Direction']?.toLowerCase();
+        const normalised = direction === 'lower is better' ? 100 - percentile : percentile;
+
+        // Interpolate colour: 0–50 = red → amber, 50–100 = amber → green
+        let percentileColor = AMBER;
+        if (normalised < 50) {
+          const factor = normalised / 50;
+          percentileColor = interpolateColor(RED, AMBER, factor);
+        } else {
+          const factor = (normalised - 50) / 50;
+          percentileColor = interpolateColor(AMBER, GREEN, factor);
+        }
+
+        const ordinal = (() => {
+          const s = ["th", "st", "nd", "rd"];
+          const v = percentile % 100;
+          return percentile + (s[(v - 20) % 10] || s[v] || s[0]);
+        })();
+
+        return `
+          <tr class="border-b">
+            <td class="px-4 py-2 text-sm">${row['Measure Group']}</td>
+            <td class="px-4 py-2 text-sm">${row['Measure Group Description']}</td>
+            <td class="px-4 py-2 text-sm">${formattedValue}</td>
+            <td class="px-4 py-2 text-sm" style="background-color: ${percentileColor};">${ordinal}</td>
+          </tr>
+        `;
+      }).join('');
+
+      container.innerHTML = `
+        <table class="min-w-full text-left border rounded mt-6">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="px-4 py-2 text-sm font-medium">ASCOF Measure</th>
+              <th class="px-4 py-2 text-sm font-medium">Description</th>
+              <th class="px-4 py-2 text-sm font-medium">Value</th>
+              <th class="px-4 py-2 text-sm font-medium">National Percentile</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    });
+}
+
 
 // Event listeners
 document.getElementById('measureSelect').addEventListener('change', function () {
@@ -172,41 +285,3 @@ window.onload = function () {
   const initialMeasure = document.getElementById('measureSelect').value;
   updateDisaggregationOptions(initialMeasure);
 };
-
-function updateLATable(selectedLA) {
-  const params = new URLSearchParams();
-  if (selectedLA) params.append('la', selectedLA);
-
-  fetch(`/la-outcomes?${params.toString()}`)
-    .then(res => res.json())
-    .then(data => {
-      const container = document.getElementById('laMeasuresTable');
-      if (!data.length) {
-        container.innerHTML = '<p class="text-gray-600 text-sm">No data available.</p>';
-        return;
-      }
-
-      const rows = data.map(row => `
-        <tr class="border-b">
-          <td class="px-4 py-2 text-sm">${row['Measure Group Description']}</td>
-          <td class="px-4 py-2 text-sm">${parseFloat(row['Measure_Value']).toFixed(2)}</td>
-          <td class="px-4 py-2 text-sm">${Math.round(row['Percentile'])}th</td>
-          <td class="px-4 py-2 text-sm">${row['Direction']}</td>
-        </tr>
-      `).join('');
-
-      container.innerHTML = `
-        <table class="min-w-full text-left border rounded mt-6">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="px-4 py-2 text-sm font-medium">Measure</th>
-              <th class="px-4 py-2 text-sm font-medium">Value</th>
-              <th class="px-4 py-2 text-sm font-medium">Percentile</th>
-              <th class="px-4 py-2 text-sm font-medium">Better Direction</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-    });
-}
