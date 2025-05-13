@@ -1,10 +1,12 @@
 let chart;
+let trendChart;
 
 function fetchAndRender() {
   const measure = document.getElementById('measureSelect').value;
   const regionOptions = document.getElementById('regionSelect').selectedOptions;
   const regions = Array.from(regionOptions).map(opt => opt.value);
   const disagg = document.getElementById('disaggSelect').value;
+  
 
   const params = new URLSearchParams();
   params.append('measure', measure);
@@ -98,6 +100,7 @@ function fetchAndRender() {
       });
 
       updateLATable(selectedHighlight || '');
+      fetchTrendData();  // also update trend graph
     });
 }
 
@@ -125,11 +128,7 @@ function updateDisaggregationOptions(measure) {
           disaggSelect.appendChild(option);
         });
 
-        if (options.includes('Total')) {
-          disaggSelect.value = 'Total';
-        } else {
-          disaggSelect.value = '';
-        }
+        disaggSelect.value = options.includes('Total') ? 'Total' : '';
       } else {
         disaggSelect.disabled = true;
         disaggSelect.classList.remove('bg-white');
@@ -157,104 +156,157 @@ function generateSummary() {
     });
 }
 
-// Ordinal suffix helper
-function formatOrdinal(n) {
-  const s = ["th", "st", "nd", "rd"];
-  const v = n % 100;
-  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+function fetchTrendData() {
+  const measure = document.getElementById('measureSelect').value;
+  const la = document.getElementById('highlightSelect').tomselect?.getValue() || '';
+
+  const params = new URLSearchParams();
+  params.append('measure', measure);
+  if (la) params.append('la', la);
+
+  fetch(`/trend-data?${params.toString()}`)
+    .then(res => res.json())
+    .then(data => {
+      const ctx = document.getElementById('trendChart').getContext('2d');
+      if (trendChart) trendChart.destroy();
+
+      const buildSeries = (label, entries, color) => ({
+        label,
+        data: entries.map(d => ({ x: d.Year, y: d.Measure_Value })),
+        borderColor: color,
+        backgroundColor: color,
+        tension: 0.3,
+        spanGaps: true
+      });
+
+      const datasets = [];
+
+      if (data.england) datasets.push(buildSeries('England', data.england, 'rgba(54, 162, 235, 0.2)'));
+      if (data.region) {
+       const regionName = data.region.length > 0 ? data.region[0].Region || 'Region' : 'Region';
+       datasets.push(buildSeries(regionName, data.region, 'rgba(54, 162, 235, 0.4)'));
+      }
+      if (data.la) {
+       const laName = document.getElementById('highlightSelect').tomselect?.getItem()?.innerText || la;
+       datasets.push(buildSeries(laName, data.la, 'rgba(255, 99, 132, 1)'));
+      }
+
+      // Dynamically collect all unique years across all series
+      const allYears = new Set();
+      [...(data.england || []), ...(data.region || []), ...(data.la || [])].forEach(d => {
+        allYears.add(d.Year);
+      });
+      const sortedYears = Array.from(allYears).sort();
+
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: `${measure} trend over time`,
+              font: { size: 16, weight: 'bold' },
+              padding: { bottom: 16 }
+            },
+            tooltip: { mode: 'index', intersect: false },
+            legend: { display: true }
+          },
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+          scales: {
+            x: {
+              type: 'category',
+              labels: sortedYears,
+              offset: true,  // ✅ add spacing before first label
+              title: { display: true, text: 'Year' }
+            },
+            y: {
+              title: { display: true, text: 'Value' },
+              ticks: { precision: 1 },
+              beginAtZero: false,
+              suggestedMin: (ctx) => {
+                const values = ctx.chart.data.datasets.flatMap(d => d.data.map(p => p.y));
+                const min = Math.min(...values);
+                const range = Math.max(...values) - min;
+                return min - range * 0.05;
+              },
+              suggestedMax: (ctx) => {
+                const values = ctx.chart.data.datasets.flatMap(d => d.data.map(p => p.y));
+                const max = Math.max(...values);
+                const range = max - Math.min(...values);
+                return max + range * 0.05;
+              }
+            }
+          }
+        }
+      });
+    });
 }
 
-// Colour scale from red → amber → green
-function getPercentileColor(percentile, direction) {
-  const scale = direction === "Higher is better"
-    ? percentile / 100
-    : 1 - percentile / 100;
 
-  const interpolateHex = (start, mid, end, t) => {
-    const [r1, g1, b1] = start;
-    const [r2, g2, b2] = mid;
-    const [r3, g3, b3] = end;
-
-    if (t < 0.5) {
-      t *= 2;
-      return `rgb(${Math.round(r1 + (r2 - r1) * t)}, ${Math.round(g1 + (g2 - g1) * t)}, ${Math.round(b1 + (b2 - b1) * t)})`;
-    } else {
-      t = (t - 0.5) * 2;
-      return `rgb(${Math.round(r2 + (r3 - r2) * t)}, ${Math.round(g2 + (g3 - g2) * t)}, ${Math.round(b2 + (b3 - b2) * t)})`;
-    }
-  };
-
-  return interpolateHex([237, 121, 121], [255, 202, 110], [120, 196, 116], scale);
-}
 
 function updateLATable(selectedLA) {
+  const loading = document.getElementById('benchmarkingLoading');
+  const container = document.getElementById('laMeasuresTable');
+
+  loading.classList.remove('hidden');
+  container.classList.add('hidden');
+
   const params = new URLSearchParams();
   if (selectedLA) params.append('la', selectedLA);
 
   fetch(`/la-outcomes?${params.toString()}`)
     .then(res => res.json())
     .then(data => {
-      const container = document.getElementById('laMeasuresTable');
-
-      // 🆕 Only keep rows where Disaggregation Level is "Total" or blank/null
-      const totalOnly = data.filter(row => {
-        const level = row['Disaggregation Level'];
-        return !level || level.trim().toLowerCase() === 'total';
-      });
-
-      if (!totalOnly.length) {
-        container.innerHTML = '<p class="text-gray-600 text-sm">No total-level benchmarking data available for this council.</p>';
+      if (!data.length) {
+        container.innerHTML = '<p class="text-gray-600 text-sm">Select a local authority to see benchmarking detail.</p>';
+        loading.classList.add('hidden');
+        container.classList.remove('hidden');
         return;
       }
 
-      // 🟢 Colour interpolation helpers
-      function interpolateColor(color1, color2, factor) {
-        const c1 = color1.match(/\w\w/g).map(hex => parseInt(hex, 16));
-        const c2 = color2.match(/\w\w/g).map(hex => parseInt(hex, 16));
-        const result = c1.map((v, i) => Math.round(v + factor * (c2[i] - v)));
-        return `rgb(${result[0]}, ${result[1]}, ${result[2]})`;
-      }
+      const rows = data
+        .filter(row => row['Disaggregation Level'] === 'Total')
+        .map(row => {
+          const isProportion = row['Measure Group Description']?.toLowerCase().startsWith('proportion');
+          const value = parseFloat(row['Measure_Value']);
+          const formattedValue = isProportion ? `${Math.round(value)}%` : value.toFixed(2);
 
-      const RED = '#ed7979';
-      const AMBER = '#ffca6e';
-      const GREEN = '#78c474';
+          const percentile = Math.round(row['Percentile_National']) || 0;
+          const direction = row['Direction']?.toLowerCase();
+          const normalised = direction === 'lower is better' ? 100 - percentile : percentile;
 
-      const rows = totalOnly.map(row => {
-        const isProportion = row['Measure Group Description']?.toLowerCase().startsWith('proportion');
-        const value = parseFloat(row['Measure_Value']);
-        const formattedValue = isProportion
-          ? `${Math.round(value)}%`
-          : value.toFixed(2);
+          const RED = '#ed7979', AMBER = '#ffca6e', GREEN = '#78c474';
+          const interpolateColor = (c1, c2, f) => {
+            const hex = x => parseInt(x, 16);
+            const rgb = c => [hex(c.slice(1,3)), hex(c.slice(3,5)), hex(c.slice(5,7))];
+            const [r1, g1, b1] = rgb(c1), [r2, g2, b2] = rgb(c2);
+            const r = Math.round(r1 + (r2 - r1) * f);
+            const g = Math.round(g1 + (g2 - g1) * f);
+            const b = Math.round(b1 + (b2 - b1) * f);
+            return `rgb(${r}, ${g}, ${b})`;
+          };
 
-        const percentile = Math.round(row['Percentile_National']) || 0;
-        const direction = row['Direction']?.toLowerCase();
-        const normalised = direction === 'lower is better' ? 100 - percentile : percentile;
+          const color = normalised < 50
+            ? interpolateColor(RED, AMBER, normalised / 50)
+            : interpolateColor(AMBER, GREEN, (normalised - 50) / 50);
 
-        // Interpolate colour: 0–50 = red → amber, 50–100 = amber → green
-        let percentileColor = AMBER;
-        if (normalised < 50) {
-          const factor = normalised / 50;
-          percentileColor = interpolateColor(RED, AMBER, factor);
-        } else {
-          const factor = (normalised - 50) / 50;
-          percentileColor = interpolateColor(AMBER, GREEN, factor);
-        }
+          const formatOrdinal = n => {
+            const s = ["th", "st", "nd", "rd"];
+            const v = n % 100;
+            return n + (s[(v - 20) % 10] || s[v] || s[0]);
+          };
 
-        const ordinal = (() => {
-          const s = ["th", "st", "nd", "rd"];
-          const v = percentile % 100;
-          return percentile + (s[(v - 20) % 10] || s[v] || s[0]);
-        })();
-
-        return `
-          <tr class="border-b">
-            <td class="px-4 py-2 text-sm">${row['Measure Group']}</td>
-            <td class="px-4 py-2 text-sm">${row['Measure Group Description']}</td>
-            <td class="px-4 py-2 text-sm">${formattedValue}</td>
-            <td class="px-4 py-2 text-sm" style="background-color: ${percentileColor};">${ordinal}</td>
-          </tr>
-        `;
-      }).join('');
+          return `
+            <tr class="border-b">
+              <td class="px-4 py-2 text-sm">${row['Measure Group']}</td>
+              <td class="px-4 py-2 text-sm">${row['Measure Group Description']}</td>
+              <td class="px-4 py-2 text-sm">${formattedValue}</td>
+              <td class="px-4 py-2 text-sm" style="background-color: ${color};">${formatOrdinal(percentile)}</td>
+            </tr>
+          `;
+        }).join('');
 
       container.innerHTML = `
         <table class="min-w-full text-left border rounded mt-6">
@@ -269,19 +321,27 @@ function updateLATable(selectedLA) {
           <tbody>${rows}</tbody>
         </table>
       `;
+
+      loading.classList.add('hidden');
+      container.classList.remove('hidden');
     });
 }
-
 
 // Event listeners
 document.getElementById('measureSelect').addEventListener('change', function () {
   updateDisaggregationOptions(this.value);
+  fetchTrendData();
 });
 document.getElementById('regionSelect').addEventListener('change', fetchAndRender);
 document.getElementById('disaggSelect').addEventListener('change', fetchAndRender);
-document.getElementById('highlightSelect').addEventListener('change', fetchAndRender);
+document.getElementById('highlightSelect').addEventListener('change', () => {
+  fetchAndRender();
+  fetchTrendData();
+});
 
+// Initial load
 window.onload = function () {
   const initialMeasure = document.getElementById('measureSelect').value;
   updateDisaggregationOptions(initialMeasure);
+  fetchTrendData();
 };

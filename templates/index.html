@@ -67,9 +67,18 @@
           </div>
         </div>
 
+        <!-- Trend Chart -->
+        <div class="bg-white p-6 rounded-xl shadow">
+          <h2 class="text-xl font-semibold mb-4">Trend Over Time</h2>
+          <div class="min-h-[400px]">
+    <canvas id="trendChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
         <!-- Benchmarking Table -->
         <div class="bg-white p-6 rounded-xl shadow">
           <h2 class="text-xl font-semibold mb-4">Benchmarking Table</h2>
+          <div id="benchmarkingLoading" class="text-sm text-gray-500 hidden">Loading data...</div>
           <div id="laMeasuresTable" class="overflow-x-auto">
             <table class="min-w-full text-left border rounded">
               <thead class="bg-gray-100 border-b">
@@ -115,7 +124,7 @@
           </select>
         </div>
 
-        <div>
+        <<div>
           <label for="disaggSelect" class="block mb-1 text-sm font-medium text-gray-700">Disaggregation Level</label>
           <select id="disaggSelect" class="w-full border border-gray-300 rounded-lg p-2">
             {% for d in disaggregations %}
