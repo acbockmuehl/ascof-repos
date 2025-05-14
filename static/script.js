@@ -3,17 +3,16 @@ let trendChart;
 
 function fetchAndRender() {
   const measure = document.getElementById('measureSelect').value;
-  const regionOptions = document.getElementById('regionSelect').selectedOptions;
-  const regions = Array.from(regionOptions).map(opt => opt.value);
-  const disagg = document.getElementById('disaggSelect').value;
-  
+   // ✅ Set the title above both charts
+   document.getElementById('selectedMeasureTitle').textContent = measure || '';
+  const region = document.getElementById('regionSelect').value;
 
   const params = new URLSearchParams();
   params.append('measure', measure);
-  if (disagg && disagg !== '') {
-    params.append('disagg', disagg);
+  
+  if (region) {
+    params.append('regions[]', region);
   }
-  regions.forEach(r => params.append('regions[]', r));
 
   fetch(`/pareto-data?${params.toString()}`)
     .then(res => res.json())
@@ -81,10 +80,7 @@ function fetchAndRender() {
             tooltip: { enabled: true },
             legend: { display: false },
             title: {
-              display: true,
-              text: measure,
-              font: { size: 16, weight: 'bold' },
-              padding: { bottom: 16 }
+              display: false,
             }
           },
           scales: {
@@ -205,10 +201,7 @@ function fetchTrendData() {
           responsive: true,
           plugins: {
             title: {
-              display: true,
-              text: `${measure} trend over time`,
-              font: { size: 16, weight: 'bold' },
-              padding: { bottom: 16 }
+              display: false,
             },
             tooltip: { mode: 'index', intersect: false },
             legend: { display: true }
@@ -329,11 +322,11 @@ function updateLATable(selectedLA) {
 
 // Event listeners
 document.getElementById('measureSelect').addEventListener('change', function () {
-  updateDisaggregationOptions(this.value);
+  fetchAndRender();
   fetchTrendData();
 });
+
 document.getElementById('regionSelect').addEventListener('change', fetchAndRender);
-document.getElementById('disaggSelect').addEventListener('change', fetchAndRender);
 document.getElementById('highlightSelect').addEventListener('change', () => {
   fetchAndRender();
   fetchTrendData();
@@ -342,6 +335,14 @@ document.getElementById('highlightSelect').addEventListener('change', () => {
 // Initial load
 window.onload = function () {
   const initialMeasure = document.getElementById('measureSelect').value;
+
+  // Log for debug purposes
+  console.log('Initial measure:', initialMeasure);
+
+  // This function will also call fetchAndRender() internally
   updateDisaggregationOptions(initialMeasure);
-  fetchTrendData();
+
+  // Call fetchAndRender again to guarantee initial data is loaded
+  // (safe to do even if it's also triggered in updateDisaggregationOptions)
+  fetchAndRender();
 };

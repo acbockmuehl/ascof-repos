@@ -15,37 +15,63 @@
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 
   <style>
-    .ts-wrapper.single .ts-control {
-      font-size: 1rem;
-      line-height: 1.5rem;
-      font-family: inherit;
+    .ts-wrapper.single {
+      width: 100%;
+      height: 44px;
+      border: 1px solid #d1d5db !important;
       border-radius: 0.5rem;
-      border: 1px solid #d1d5db;
+      padding: 0 0.75rem;
+      background-color: white;
+      display: flex;
+      align-items: center;
+      font-size: 1rem;
+      font-weight: 500;
       box-shadow: none !important;
-      padding: 0.5rem 0.75rem;
-      background-color: white;
     }
 
-    .ts-wrapper.single.focus .ts-control {
+    .ts-wrapper.single.focus {
       border-color: #3b82f6;
-      box-shadow: 0 0 0 1px #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
     }
 
-    .ts-dropdown {
+    .ts-wrapper.single .ts-control {
+      border: none !important;
+      padding: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      display: flex;
+      align-items: center;
+      height: 100% !important;
       font-size: 1rem;
+      font-weight: 500;
       line-height: 1.5rem;
-      font-family: inherit;
-      border-radius: 0.5rem;
     }
 
-    .ts-control {
-      outline: none;
-      background-color: white;
+    .ts-wrapper.single .item {
+      padding: 0 !important;
+      margin: 0 !important;
+      line-height: 1.5rem !important;
+      font-size: 1rem !important;
+      font-weight: 500 !important;
+    }
+
+    .ts-wrapper.single .ts-control input {
+      margin: 0 !important;
+      padding: 0 !important;
+      font-size: 1rem;
+      font-weight: 500;
+      line-height: 1.5rem;
+    }
+
+    select {
+      font-size: 1rem;
+      font-weight: 500;
+      height: 44px;
     }
   </style>
 </head>
+<body class="bg-gray-50 text-gray-900 font-sans min-h-screen">
 
-<body class="bg-gray-50 text-gray-900 font-sans min-h-screen flex flex-col">
   <!-- Header -->
   <header class="p-6 border-b border-gray-200 bg-white shadow-sm">
     <div class="max-w-screen-xl mx-auto">
@@ -53,91 +79,94 @@
     </div>
   </header>
 
+  <!-- Filters -->
+  <section class="bg-white py-4 shadow-sm border-b">
+    <div class="max-w-screen-xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      <div class="flex flex-col gap-1">
+        <label for="highlightSelect" class="text-sm font-medium text-gray-700">Local Authority</label>
+        <select id="highlightSelect" class="w-full"></select>
+      </div>
+      <div class="flex flex-col gap-1">
+        <label for="regionSelect" class="text-sm font-medium text-gray-700">Region</label>
+        <select id="regionSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
+          <option value="">All</option>
+          {% for region in regions %}
+            <option value="{{ region }}">{{ region }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex flex-col gap-1 md:col-span-2">
+        <label for="measureSelect" class="text-sm font-medium text-gray-700">ASCOF Measure</label>
+        <select id="measureSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
+          {% for value, label in measure_groups %}
+            <option value="{{ value }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </section>
+
   <!-- Main Content -->
-  <main class="flex-1 py-8">
-    <div class="max-w-screen-xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 px-6">
-      
-      <!-- Chart & Table -->
-      <div class="lg:col-span-2 space-y-6">
-        <!-- Chart -->
-        <div class="bg-white p-6 rounded-xl shadow">
-          <h2 class="text-xl font-semibold mb-4">Comparator Chart</h2>
-          <div class="min-h-[400px]">
+<main class="flex-1 py-10">
+  <div class="max-w-screen-xl mx-auto px-6 flex flex-col gap-8">
+
+    <!-- 🔒 SINGLE CARD: Title + Charts (Grouped Properly) -->
+    <div class="bg-white rounded-xl shadow p-6">
+      <!-- Title (inside the card) -->
+      <h2 id="selectedMeasureTitle" class="text-2xl font-semibold text-gray-800 text-center mb-6"></h2>
+
+
+      <!-- Grid: Each chart in its own inner card -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- Chart Card: Benchmark -->
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+          <h3 class="text-lg font-semibold text-center mb-4">Benchmark comparison</h3>
+          <div class="min-h-[300px]">
             <canvas id="paretoChart" class="w-full h-full"></canvas>
           </div>
         </div>
 
-        <!-- Trend Chart -->
-        <div class="bg-white p-6 rounded-xl shadow">
-          <h2 class="text-xl font-semibold mb-4">Trend Over Time</h2>
-          <div class="min-h-[400px]">
-    <canvas id="trendChart" class="w-full h-full"></canvas>
+        <!-- Chart Card: Trend -->
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+          <h3 class="text-lg font-semibold text-center mb-4">Trend over time</h3>
+          <div class="min-h-[300px]">
+            <canvas id="trendChart" class="w-full h-full"></canvas>
           </div>
         </div>
 
-        <!-- Benchmarking Table -->
-        <div class="bg-white p-6 rounded-xl shadow">
-          <h2 class="text-xl font-semibold mb-4">Benchmarking Table</h2>
-          <div id="benchmarkingLoading" class="text-sm text-gray-500 hidden">Loading data...</div>
-          <div id="laMeasuresTable" class="overflow-x-auto">
-            <table class="min-w-full text-left border rounded">
-              <thead class="bg-gray-100 border-b">
-                <tr>
-                  <th class="px-4 py-2 text-sm font-medium">Measure Group</th>
-                  <th class="px-4 py-2 text-sm font-medium">Description</th>
-                  <th class="px-4 py-2 text-sm font-medium">Value</th>
-                  <th class="px-4 py-2 text-sm font-medium">National Percentile</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="px-4 py-2 text-sm text-gray-500" colspan="4">Select a local authority to see benchmarking detail</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
       </div>
-
-      <!-- Sidebar Filters -->
-      <aside class="bg-white p-6 rounded-xl shadow space-y-6 self-start">
-        <div>
-          <label for="highlightSelect" class="block mb-1 text-sm font-medium text-gray-700">Select Local Authority</label>
-          <select id="highlightSelect" class="w-full"></select>
-        </div>
-
-        <div>
-          <label for="measureSelect" class="block mb-1 text-sm font-medium text-gray-700">ASCOF Measure</label>
-          <select id="measureSelect" class="w-full border border-gray-300 rounded-lg p-2">
-            {% for value, label in measure_groups %}
-              <option value="{{ value }}">{{ label }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div>
-          <label for="regionSelect" class="block mb-1 text-sm font-medium text-gray-700">Region(s)</label>
-          <select id="regionSelect" multiple class="w-full border border-gray-300 rounded-lg p-2 h-32">
-            {% for region in regions %}
-              <option value="{{ region }}">{{ region }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <<div>
-          <label for="disaggSelect" class="block mb-1 text-sm font-medium text-gray-700">Disaggregation Level</label>
-          <select id="disaggSelect" class="w-full border border-gray-300 rounded-lg p-2">
-            {% for d in disaggregations %}
-              <option value="{{ d }}">{{ d }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <!-- Summary Output -->
-        <div id="mistralSummary" class="text-sm text-gray-700 whitespace-pre-wrap pt-2 border-t"></div>
-      </aside>
     </div>
-  </main>
+
+    <!-- Benchmarking Table -->
+    <div class="bg-white p-6 rounded-xl shadow">
+      <h2 class="text-xl font-semibold mb-4">Benchmarking Table</h2>
+      <div id="benchmarkingLoading" class="text-sm text-gray-500 hidden">Loading data...</div>
+      <div id="laMeasuresTable" class="overflow-x-auto">
+        <table class="min-w-full text-left border rounded">
+          <thead class="bg-gray-100 border-b">
+            <tr>
+              <th class="px-4 py-2 text-sm font-medium">ASCOF Measure</th>
+              <th class="px-4 py-2 text-sm font-medium">Description</th>
+              <th class="px-4 py-2 text-sm font-medium">Value</th>
+              <th class="px-4 py-2 text-sm font-medium">National Percentile</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="px-4 py-2 text-sm text-gray-500" colspan="4">Select a local authority to see benchmarking detail</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Summary Output -->
+    <div class="bg-white p-6 rounded-xl shadow">
+      <div id="mistralSummary" class="text-sm text-gray-700 whitespace-pre-wrap"></div>
+    </div>
+  </div>
+</main>
 
   <script src="/static/script.js"></script>
 </body>
