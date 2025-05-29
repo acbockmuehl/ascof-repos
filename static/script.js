@@ -1,7 +1,15 @@
 let chart;
 let trendChart;
 
-function fetchAndRender() {
+function debounce(fn, delay = 50) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
+function fetchAndRender({ skipTable = false } = {}) {
   const measure = document.getElementById('measureSelect').value;
    // ✅ Set the title above both charts
    document.getElementById('selectedMeasureTitle').textContent = measure || '';
@@ -35,10 +43,11 @@ function fetchAndRender() {
       const names = Array.from(new Set(data.map(d => d['Geographical Description'])))
         .sort((a, b) => a.localeCompare(b));
 
-      names.forEach(name => {
+      data.forEach(row => {
         const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
+        option.value = row['Geographical Description'];
+        option.textContent = row['Geographical Description'];
+        option.setAttribute('data-region', row['Council region'] || '');
         highlightSelect.appendChild(option);
       });
 
@@ -95,8 +104,11 @@ function fetchAndRender() {
         }
       });
 
-      updateLATable(selectedHighlight || '');
+      if (!skipTable) {
+        updateLATable(selectedHighlight || '');
+      }
       fetchTrendData();  // also update trend graph
+      populateCostFilterOptions();
     });
 }
 
@@ -237,15 +249,14 @@ function fetchTrendData() {
     });
 }
 
-
-
 function updateLATable(selectedLA) {
   const loading = document.getElementById('benchmarkingLoading');
   const container = document.getElementById('laMeasuresTable');
 
-  loading.classList.remove('hidden');
-  container.classList.add('hidden');
-
+  if (selectedLA) {
+    loading.classList.remove('hidden');
+    container.classList.add('hidden');
+  }
   const params = new URLSearchParams();
   if (selectedLA) params.append('la', selectedLA);
 
@@ -322,8 +333,12 @@ function updateLATable(selectedLA) {
 
 // Event listeners
 document.getElementById('measureSelect').addEventListener('change', function () {
-  fetchAndRender();
-  fetchTrendData();
+  updateDisaggregationOptions(this.value);
+  fetchAndRender({ skipTable: true });  // ❌ don’t reload table
+});
+
+document.getElementById('regionSelect').addEventListener('change', function () {
+  fetchAndRender({ skipTable: true });  // ❌ don’t reload table
 });
 
 document.getElementById('regionSelect').addEventListener('change', fetchAndRender);
@@ -335,14 +350,313 @@ document.getElementById('highlightSelect').addEventListener('change', () => {
 // Initial load
 window.onload = function () {
   const initialMeasure = document.getElementById('measureSelect').value;
-
-  // Log for debug purposes
   console.log('Initial measure:', initialMeasure);
 
-  // This function will also call fetchAndRender() internally
+  populateCostFilterOptions(); // populate LA and Region filters first
+  attachCostFilterListeners(); // hook up all filter change handlers
   updateDisaggregationOptions(initialMeasure);
-
-  // Call fetchAndRender again to guarantee initial data is loaded
-  // (safe to do even if it's also triggered in updateDisaggregationOptions)
-  fetchAndRender();
+  fetchAndRender(); // for ASCOF tab
 };
+
+// ────────────────────────────────────────────────────────────────────────────
+//  GLOBAL CHART INSTANCES
+// ────────────────────────────────────────────────────────────────────────────
+let costBenchmarkChart;
+let costTrendChart;
+
+// ────────────────────────────────────────────────────────────────────────────
+//  MAIN FETCH + RENDER
+// ────────────────────────────────────────────────────────────────────────────
+function fetchAndRenderCostCharts() {
+  // 1️⃣ Grab current filters --------------------------------------------------
+  const laSelect = document.getElementById('costFilterLA');
+  const la      = laSelect && laSelect.value ? laSelect.value.trim() : '';
+  const region  = document.getElementById('costFilterRegion').value;
+  const ageGroups = Array.from(document.getElementById('costFilterAge').selectedOptions).map(o => o.value);
+  const setting = document.getElementById('costFilterSetting').value;
+  const reason  = document.getElementById('costFilterReason').value;
+
+  // 2️⃣ Build querystring -----------------------------------------------------
+  const params = new URLSearchParams();
+  if (la)      params.append('la', la);
+  if (region)  params.append('region', region);
+  ageGroups.forEach(g => params.append('age_groups[]', g));
+  if (setting) params.append('support_setting', setting);
+  if (reason)  params.append('primary_support_reason', reason);
+
+  // 3️⃣ Fetch & render --------------------------------------------------------
+  fetch(`/cost-data?${params.toString()}`)
+    .then(res => res.json())
+    .then(data => {
+      console.log('📦 cost-data response:', data);
+
+      // ───────────────────────────────────────────────────────────
+      //  COMMON FORMATTERS → £000s → £Xm
+      // ───────────────────────────────────────────────────────────
+      const toMillions = v => v / 1_000;                       // 1k ➜ 1m
+      const tickFmt = v => `£${toMillions(v).toLocaleString()} m`;
+      const tooltipFmt = raw =>
+        `£${toMillions(raw).toFixed(raw >= 100_000 ? 0 : raw >= 10_000 ? 1 : 2)} m`;
+
+      // ───────────────────────────────────────────────────────────
+      //  BENCHMARK  BAR  CHART
+      // ───────────────────────────────────────────────────────────
+      const benchmarkCtx = document.getElementById('costBenchmarkChart').getContext('2d');
+      if (costBenchmarkChart) costBenchmarkChart.destroy();
+
+      const labels = data.benchmark.map(d => d['Geographical Description']);
+      const values = data.benchmark.map(d => d['Measure_Value']);
+      const selectedLA = la;
+
+      const backgroundColors = labels.map(label =>
+        label === selectedLA
+          ? 'rgba(255, 99, 132, 0.8)'   // red = selected LA
+          : 'rgba(54, 162, 235, 0.6)'   // blue = others
+      );
+
+      costBenchmarkChart = new Chart(benchmarkCtx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: '£ m',               // legend label
+            data: values,
+            backgroundColor: backgroundColors
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => tooltipFmt(ctx.parsed.y)
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: '£ millions' },
+              ticks: { callback: tickFmt }
+            },
+            x: {
+              title: { display: true, text: 'Local Authority' }
+            }
+          }
+        }
+      });
+
+      // ───────────────────────────────────────────────────────────
+      //  TREND  LINE  CHART
+      // ───────────────────────────────────────────────────────────
+      const trendCtx = document.getElementById('costTrendChart').getContext('2d');
+      if (costTrendChart) costTrendChart.destroy();
+
+      const buildSeries = (label, entries, color) => ({
+        label,
+        data: entries.map(d => ({ x: d.Year, y: d.Measure_Value })),
+        borderColor: color,
+        backgroundColor: color,
+        tension: 0.3,
+        spanGaps: true
+      });
+
+      const trendData = [];
+      if (data.england?.length)
+        trendData.push(buildSeries('England average', data.england, 'rgba(54, 162, 235, 0.3)'));
+
+      if (data.region?.length) {
+        const regionName = data.region[0]?.Region || 'Regional';
+        trendData.push(buildSeries(`${regionName} average`, data.region, 'rgba(54, 162, 235, 0.6)'));
+      }
+
+      if (data.la?.length) {
+        const selectedLAName = laSelect.options[laSelect.selectedIndex]?.text || 'Local Authority';
+        trendData.push(buildSeries(selectedLAName, data.la, 'rgba(255, 99, 132, 1)'));
+      }
+
+      const allYears = new Set();
+      [...(data.england || []), ...(data.region || []), ...(data.la || [])]
+        .forEach(d => allYears.add(d.Year));
+      const sortedYears = Array.from(allYears).sort();
+
+      costTrendChart = new Chart(trendCtx, {
+        type: 'line',
+        data: { datasets: trendData },
+        options: {
+          responsive: true,
+          interaction: { mode: 'nearest', axis: 'x', intersect: false },
+          plugins: {
+            legend: { display: true },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              callbacks: {
+                label: ctx => tooltipFmt(ctx.parsed.y)
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'category',
+              labels: sortedYears,
+              offset: true,
+              title: { display: true, text: 'Year' }
+            },
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: '£ millions' },
+              ticks: { callback: tickFmt }
+            }
+          }
+        }
+      });
+    });
+
+  // Optional: still update the subtitle (no-op if stubbed)
+  updateSubtitle?.();
+}
+
+  
+const fetchCostDebounced = debounce(fetchAndRenderCostCharts, 150);
+
+function attachCostFilterListeners() {
+  const selectors = [
+    'costFilterLA',
+    'costFilterRegion',
+    'costFilterAge',
+    'costFilterSetting',
+    'costFilterReason'
+  ];
+
+  selectors.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', () => {
+      updateSubtitle();
+      fetchCostDebounced();
+    });
+  });
+}
+
+function setActiveTab(selectedId) {
+  const tabs = {
+    tabAscof: {
+      el: document.getElementById('tabAscof'),
+      activeClasses: ['bg-blue-600', 'text-white', 'font-semibold', 'shadow-sm'],
+      inactiveClasses: ['text-gray-700', 'hover:outline', 'hover:outline-2', 'hover:outline-blue-500']
+    },
+    tabCost: {
+      el: document.getElementById('tabCost'),
+      activeClasses: ['bg-blue-600', 'text-white', 'font-semibold', 'shadow-sm'],
+      inactiveClasses: ['text-gray-700', 'hover:outline', 'hover:outline-2', 'hover:outline-blue-500']
+    }
+  };
+
+  Object.entries(tabs).forEach(([id, { el, activeClasses, inactiveClasses }]) => {
+    el.classList.remove(...activeClasses, ...inactiveClasses);
+    if (id === selectedId) {
+      el.classList.add(...activeClasses);
+    } else {
+      el.classList.add(...inactiveClasses);
+    }
+  });
+}
+
+document.getElementById('tabAscof').addEventListener('click', () => {
+  setActiveTab('tabAscof');
+  document.getElementById('ascofDashboard').classList.remove('hidden');
+  document.getElementById('CostDashboard').classList.add('hidden');
+});
+
+document.getElementById('tabCost').addEventListener('click', () => {
+  setActiveTab('tabCost');
+  document.getElementById('ascofDashboard').classList.add('hidden');
+  document.getElementById('CostDashboard').classList.remove('hidden');
+  fetchCostDebounced();
+});
+
+attachCostFilterListeners();
+
+
+window.addEventListener('DOMContentLoaded', () => {
+  setActiveTab('tabAscof'); // preselect ASCOF
+});
+
+
+// 🔕 Disable the subtitle for now
+function updateSubtitle() { /* no-op */ }
+
+// Populate LA and Region filter options dynamically from existing dropdowns
+function populateCostFilterOptions() {
+  const laSelect     = document.getElementById('costFilterLA');
+  const regionSelect = document.getElementById('costFilterRegion');
+
+  // --- Gather every LA + its region from the hidden ASCOF dropdown ----------
+  const allLAs = Array.from(document.querySelectorAll('#highlightSelect option'))
+    .map(opt => ({
+      name  : opt.value,
+      region: opt.getAttribute('data-region')?.trim() || ''
+    }))
+    .filter(o => o.name);                         // skip empty option
+
+  const allRegions = Array.from(new Set(allLAs.map(o => o.region)))
+    .filter(Boolean)                              // drop blanks
+    .sort();
+
+  // --- Build Region dropdown ------------------------------------------------
+  regionSelect.innerHTML = '';                    // reset
+  regionSelect.appendChild(new Option('All', ''));   // default first row
+  allRegions.forEach(r => regionSelect.appendChild(new Option(r, r)));
+
+  // --- Helper to (re)populate the LA dropdown ------------------------------
+  const renderLAs = (list) => {
+    laSelect.innerHTML = '';
+    laSelect.appendChild(new Option('None', ''));    // first row
+    list
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .forEach(({ name, region }) => {
+        const opt = new Option(name, name);
+        opt.setAttribute('data-region', region);
+        laSelect.appendChild(opt);
+      });
+  };
+
+  // Initial render: show *all* LAs
+  renderLAs(allLAs);
+
+  // --------------------------------------------------------------------------
+  // REGION change logic
+  //   • Filters the LA list to councils inside the chosen region.
+  //   • Clears LA selection if it’s no longer valid.
+  //   • Triggers chart refresh.
+  // --------------------------------------------------------------------------
+  regionSelect.addEventListener('change', () => {
+    const region = regionSelect.value;            // '' means All
+    const currentLA = laSelect.value;
+
+    const filteredLAs = region
+      ? allLAs.filter(o => o.region === region)
+      : allLAs;
+
+    renderLAs(filteredLAs);
+
+    if (!filteredLAs.some(o => o.name === currentLA)) {
+      laSelect.value = '';                        // reset LA if out of scope
+    }
+
+    // 🔄 Refresh charts with the new region filter
+    fetchCostDebounced();
+  });
+
+  // --------------------------------------------------------------------------
+  // LA change logic
+  //   • Simply refreshes charts with the chosen LA.
+  //   • Does NOT touch the Region dropdown.
+  // --------------------------------------------------------------------------
+  //laSelect.addEventListener('change', () => {
+    // (Optional) updateSubtitle?.();
+    //fetchCostDebounced();
+  //});
+}

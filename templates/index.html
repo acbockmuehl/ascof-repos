@@ -3,83 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <title>ASCOF Benchmarking Tool</title>
-
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Tom Select -->
   <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-
   <style>
     .ts-wrapper.single {
-      width: 100%;
-      height: 44px;
-      border: 1px solid #d1d5db !important;
-      border-radius: 0.5rem;
-      padding: 0 0.75rem;
-      background-color: white;
-      display: flex;
-      align-items: center;
-      font-size: 1rem;
-      font-weight: 500;
-      box-shadow: none !important;
+      width: 100%; height: 44px; border: 1px solid #d1d5db !important; border-radius: 0.5rem; padding: 0 0.75rem; background-color: white; display: flex; align-items: center; font-size: 1rem; font-weight: 500; box-shadow: none !important;
     }
-
     .ts-wrapper.single.focus {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+      border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
     }
-
-    .ts-wrapper.single .ts-control {
-      border: none !important;
-      padding: 0 !important;
-      background: transparent !important;
-      box-shadow: none !important;
-      display: flex;
-      align-items: center;
-      height: 100% !important;
-      font-size: 1rem;
-      font-weight: 500;
-      line-height: 1.5rem;
-    }
-
-    .ts-wrapper.single .item {
-      padding: 0 !important;
-      margin: 0 !important;
-      line-height: 1.5rem !important;
-      font-size: 1rem !important;
-      font-weight: 500 !important;
-    }
-
-    .ts-wrapper.single .ts-control input {
-      margin: 0 !important;
-      padding: 0 !important;
-      font-size: 1rem;
-      font-weight: 500;
-      line-height: 1.5rem;
-    }
-
-    select {
-      font-size: 1rem;
-      font-weight: 500;
-      height: 44px;
-    }
+    .ts-wrapper.single .ts-control { border: none !important; padding: 0 !important; background: transparent !important; box-shadow: none !important; display: flex; align-items: center; height: 100% !important; font-size: 1rem; font-weight: 500; line-height: 1.5rem; }
+    .ts-wrapper.single .item { padding: 0 !important; margin: 0 !important; line-height: 1.5rem !important; font-size: 1rem !important; font-weight: 500 !important; }
+    .ts-wrapper.single .ts-control input { margin: 0 !important; padding: 0 !important; font-size: 1rem; font-weight: 500; line-height: 1.5rem; }
+    select { font-size: 1rem; font-weight: 500; height: 44px; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans min-h-screen">
+<header class="p-6 border-b border-gray-200 bg-white shadow-sm">
+  <div class="max-w-screen-xl mx-auto flex justify-between items-center">
+    <h1 class="text-3xl font-semibold text-gray-800">Channel 3 ASC Benchmarking Tool</h1>
+    <div id="tabToggle" class="inline-flex bg-gray-100 rounded-full p-1 border border-gray-200 shadow-sm">
+      <button
+        id="tabAscof"
+        class="px-5 py-2 text-sm font-semibold rounded-full transition-colors bg-blue-600 text-white shadow-sm"
+      >ASCOF</button>
 
-  <!-- Header -->
-  <header class="p-6 border-b border-gray-200 bg-white shadow-sm">
-    <div class="max-w-screen-xl mx-auto">
-      <h1 class="text-3xl font-semibold text-gray-800">ASCOF Benchmarking Tool</h1>
+      <button
+        id="tabCost"
+        class="px-5 py-2 text-sm font-medium rounded-full text-gray-700 transition-colors hover:outline hover:outline-2 hover:outline-blue-500"
+      >Cost</button>
     </div>
-  </header>
+  </div>
+</header>
 
-  <!-- Filters -->
+<main id="ascofDashboard" class="py-10">
   <section class="bg-white py-4 shadow-sm border-b">
     <div class="max-w-screen-xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
       <div class="flex flex-col gap-1">
@@ -90,84 +49,180 @@
         <label for="regionSelect" class="text-sm font-medium text-gray-700">Region</label>
         <select id="regionSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
           <option value="">All</option>
-          {% for region in regions %}
-            <option value="{{ region }}">{{ region }}</option>
-          {% endfor %}
+          {% for region in regions %}<option value="{{ region }}">{{ region }}</option>{% endfor %}
         </select>
       </div>
       <div class="flex flex-col gap-1 md:col-span-2">
         <label for="measureSelect" class="text-sm font-medium text-gray-700">ASCOF Measure</label>
         <select id="measureSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
-          {% for value, label in measure_groups %}
-            <option value="{{ value }}">{{ label }}</option>
-          {% endfor %}
+          {% for value, label in measure_groups %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
         </select>
       </div>
     </div>
   </section>
 
-  <!-- Main Content -->
-<main class="flex-1 py-10">
-  <div class="max-w-screen-xl mx-auto px-6 flex flex-col gap-8">
-
-    <!-- 🔒 SINGLE CARD: Title + Charts (Grouped Properly) -->
-    <div class="bg-white rounded-xl shadow p-6">
-      <!-- Title (inside the card) -->
-      <h2 id="selectedMeasureTitle" class="text-2xl font-semibold text-gray-800 text-center mb-6"></h2>
-
-
-      <!-- Grid: Each chart in its own inner card -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        <!-- Chart Card: Benchmark -->
-        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
-          <h3 class="text-lg font-semibold text-center mb-4">Benchmark comparison</h3>
-          <div class="min-h-[300px]">
-            <canvas id="paretoChart" class="w-full h-full"></canvas>
+  <div class="flex-1 py-10">
+    <div class="max-w-screen-xl mx-auto px-6 flex flex-col gap-8">
+      <div class="bg-white rounded-xl shadow p-6">
+        <h2 id="selectedMeasureTitle" class="text-2xl font-semibold text-gray-800 text-center mb-6"></h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+            <h3 class="text-lg font-semibold text-center mb-4">Benchmark comparison</h3>
+            <div class="min-h-[300px]">
+              <canvas id="paretoChart" class="w-full h-full"></canvas>
+            </div>
+          </div>
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+            <h3 class="text-lg font-semibold text-center mb-4">Trend over time</h3>
+            <div class="min-h-[300px]">
+              <canvas id="trendChart" class="w-full h-full"></canvas>
+            </div>
           </div>
         </div>
-
-        <!-- Chart Card: Trend -->
-        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
-          <h3 class="text-lg font-semibold text-center mb-4">Trend over time</h3>
-          <div class="min-h-[300px]">
-            <canvas id="trendChart" class="w-full h-full"></canvas>
-          </div>
+      </div>
+      <div class="bg-white p-6 rounded-xl shadow">
+        <h2 class="text-xl font-semibold mb-4">Benchmarking Table</h2>
+        <div id="benchmarkingLoading" class="text-sm text-gray-500 hidden">Loading data...</div>
+        <div id="laMeasuresTable" class="overflow-x-auto">
+          <table class="min-w-full text-left border rounded">
+            <thead class="bg-gray-100 border-b">
+              <tr>
+                <th class="px-4 py-2 text-sm font-medium">ASCOF Measure</th>
+                <th class="px-4 py-2 text-sm font-medium">Description</th>
+                <th class="px-4 py-2 text-sm font-medium">Value</th>
+                <th class="px-4 py-2 text-sm font-medium">National Percentile</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="px-4 py-2 text-sm text-gray-500" colspan="4">Select a local authority to see benchmarking detail</td></tr>
+            </tbody>
+          </table>
         </div>
-
       </div>
-    </div>
-
-    <!-- Benchmarking Table -->
-    <div class="bg-white p-6 rounded-xl shadow">
-      <h2 class="text-xl font-semibold mb-4">Benchmarking Table</h2>
-      <div id="benchmarkingLoading" class="text-sm text-gray-500 hidden">Loading data...</div>
-      <div id="laMeasuresTable" class="overflow-x-auto">
-        <table class="min-w-full text-left border rounded">
-          <thead class="bg-gray-100 border-b">
-            <tr>
-              <th class="px-4 py-2 text-sm font-medium">ASCOF Measure</th>
-              <th class="px-4 py-2 text-sm font-medium">Description</th>
-              <th class="px-4 py-2 text-sm font-medium">Value</th>
-              <th class="px-4 py-2 text-sm font-medium">National Percentile</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="px-4 py-2 text-sm text-gray-500" colspan="4">Select a local authority to see benchmarking detail</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Summary Output -->
-    <div class="bg-white p-6 rounded-xl shadow">
-      <div id="mistralSummary" class="text-sm text-gray-700 whitespace-pre-wrap"></div>
     </div>
   </div>
 </main>
 
-  <script src="/static/script.js"></script>
+<main id="CostDashboard" class="py-10 hidden">
+  <!-- Unified Filters Row -->
+  <section class="bg-white py-4 shadow-sm border-b">
+    <div class="max-w-screen-xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-5 gap-4 items-end">
+
+      <!-- Local Authority -->
+      <div class="flex flex-col gap-1">
+        <label for="costFilterLA" class="text-sm font-medium text-gray-700">Local Authority</label>
+        <select id="costFilterLA" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
+          <option value="">None</option>
+          <!-- LA options will be injected dynamically -->
+        </select>
+      </div>
+
+      <!-- Region -->
+      <div class="flex flex-col gap-1">
+        <label for="costFilterRegion" class="text-sm font-medium text-gray-700">Region</label>
+        <select id="costFilterRegion" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
+          <option value="">All</option>
+          <!-- Region options will be injected dynamically -->
+        </select>
+      </div>
+
+      <!-- Support Setting -->
+      <div class="flex flex-col gap-1">
+        <label for="costFilterSetting" class="text-sm font-medium text-gray-700">Support Setting</label>
+        <select id="costFilterSetting" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
+          <option value="Total" selected>Total</option>
+          <option value="Community: Direct Payments">Community: Direct Payments</option>
+          <option value="Community: Home Care">Community: Home Care</option>
+          <option value="Community: Other Long Term Care">Community: Other Long Term Care</option>
+          <option value="Community: Supported Living">Community: Supported Living</option>
+          <option value="Nursing">Nursing</option>
+          <option value="Residential">Residential</option>
+          <option value="Supported Accommodation">Supported Accommodation</option>
+        </select>
+      </div>
+
+      <!-- Primary Support Reason -->
+      <div class="flex flex-col gap-1">
+        <label for="costFilterReason" class="text-sm font-medium text-gray-700">Primary Support Reason</label>
+        <select id="costFilterReason" class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
+          <option value="Total" selected>Total</option>
+          <option value="Learning Disability Support">Learning Disability Support</option>
+          <option value="Mental Health Support">Mental Health Support</option>
+          <option value="Physical Support">Physical Support</option>
+          <option value="Sensory Support">Sensory Support</option>
+          <option value="Support with Memory and Cognition">Support with Memory and Cognition</option>
+          <option value="Social Support">Social Support</option>
+          <option value="Assistive Equipment and TechnologyInformation and Early Intervention">
+            Assistive Equipment and Technology / Info & Early Intervention
+          </option>
+          <option value="Substance Misuse Support">Substance Misuse Support</option>
+        </select>
+      </div>
+
+      <!-- Age Group -->
+      <div class="flex flex-col gap-1">
+        <label for="costFilterAge" class="text-sm font-medium text-gray-700">Age Group</label>
+        <select id="costFilterAge" multiple class="w-full border border-gray-300 rounded-lg px-3 py-2 h-[44px]">
+          <option value="18 to 64">18 to 64</option>
+          <option value="65 and Over">65 and Over</option>
+        </select>
+      </div>
+
+    </div>
+  </section>
+
+  <div class="flex-1 py-10">
+    <div class="max-w-screen-xl mx-auto px-6 flex flex-col lg:flex-row gap-8">
+      <div class="flex-[4] flex flex-col gap-8">
+        <!-- Cost Card -->
+        <div class="bg-white rounded-xl shadow p-6">
+          <h2 class="text-2xl font-semibold text-gray-800 text-center mb-6">
+            <span class="font-bold">Cost:</span>
+            <span class="font-normal">Gross current expenditure on long term care</span>
+          </h2>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+              <h3 class="text-lg font-semibold text-center mb-4">Benchmark comparison</h3>
+              <div class="min-h-[300px]">
+                <canvas id="costBenchmarkChart" class="w-full h-full"></canvas>
+              </div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+              <h3 class="text-lg font-semibold text-center mb-4">Trend over time</h3>
+              <div class="min-h-[300px]">
+                <canvas id="costTrendChart" class="w-full h-full"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Demand Card (placeholder for future) -->
+        <!--<div class="bg-white rounded-xl shadow p-6">
+          <h2 class="text-2xl font-semibold text-gray-800 text-center mb-6">
+            <span class="font-bold">Demand:</span>
+            <span class="font-normal">Number of people supported by long term care</span>
+          </h2>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+              <h3 class="text-lg font-semibold text-center mb-4">Benchmark comparison</h3>
+              <div class="min-h-[300px]">
+                <canvas id="demandBenchmarkChart" class="w-full h-full"></canvas>
+              </div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+              <h3 class="text-lg font-semibold text-center mb-4">Trend over time</h3>
+              <div class="min-h-[300px]">
+                <canvas id="demandTrendChart" class="w-full h-full"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>-->
+      </div>
+    </div>
+  </div>
+</main>
+
+
+<script src="/static/script.js"></script>
 </body>
 </html>

@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import pandas as pd
 from dotenv import load_dotenv
 import os
+import numpy as np
 
 # Load environment variables
 load_dotenv()
@@ -67,12 +68,12 @@ def pareto_data():
     filtered.dropna(subset=['Measure_Value'], inplace=True)
 
     agg = (
-        filtered.groupby('Geographical Description')['Measure_Value']
+        filtered
+        .groupby(['Geographical Description', 'Council region'])['Measure_Value']
         .sum()
-        .sort_values(ascending=False)
-        .reset_index()
+        .reset_index()          # no sort yet
+        .sort_values('Measure_Value', ascending=False)
     )
-
     return jsonify(agg.to_dict(orient='records'))
 
 @app.route('/disaggregation-options')
@@ -193,6 +194,122 @@ def generate_summary_for_council(council_name):
 def generate_mistral_summary(df, council_name):
     return f"Summary for {council_name} with {len(df)} outcome indicators."
 
+# Load cost data
+cost_df = pd.read_csv("data/grosscurrentexpenditure.csv")
+cost_df['ITEMVALUE'] = pd.to_numeric(cost_df['ITEMVALUE'], errors='coerce')
+cost_df['ITEMVALUE'] = cost_df['ITEMVALUE'].apply(lambda x: x if x >= 0 else np.nan)
+
+@app.route('/cost-data')
+def cost_data():
+    # Get filters
+    selected_la = request.args.get('la')
+    region = request.args.get('region')
+    age_groups = request.args.getlist('age_groups[]')
+    setting = request.args.get('support_setting', 'Total')
+    reason = request.args.get('primary_support_reason', 'Total')
+
+    # Copy the full dataset for filtering
+    df = cost_df.copy()
+
+    # === Apply filters to build benchmark ===
+    benchmark_df = df.copy()
+    if region:
+        benchmark_df = benchmark_df[benchmark_df['GEOGRAPHY_NAME'].notna() & (benchmark_df['GEOGRAPHY_NAME'].str.strip() == region.strip())]
+    if age_groups:
+        benchmark_df = benchmark_df[benchmark_df['AgeBand'].isin(age_groups)]
+    if setting:
+        benchmark_df = benchmark_df[benchmark_df['SupportSetting'] == setting]
+    if reason:
+        benchmark_df = benchmark_df[benchmark_df['PrimarySupportReason'] == reason]
+
+    benchmark_df = benchmark_df[benchmark_df['GEOGRAPHY_LEVEL'] == 'Local Authority']
+    latest_year = benchmark_df['FY_ENDING'].max()
+    benchmark_df = benchmark_df[benchmark_df['FY_ENDING'] == latest_year]
+
+    benchmark_data = (
+        benchmark_df.groupby('DH_GEOGRAPHY_NAME', as_index=False)['ITEMVALUE']
+        .sum()
+        .dropna()
+        .sort_values(by='ITEMVALUE', ascending=False)
+    )
+
+    benchmark = [
+        {'Geographical Description': row['DH_GEOGRAPHY_NAME'], 'Measure_Value': round(row['ITEMVALUE'], 2)}
+        for _, row in benchmark_data.iterrows()
+    ]
+
+    # === Build trend lines using full dataset ===
+    def get_trend(df_subset):
+        if df_subset.empty:
+            return []
+        trend = df_subset.groupby('FY_ENDING', as_index=False)['ITEMVALUE'].sum()
+        trend.rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'}, inplace=True)
+        return trend.to_dict(orient='records')
+
+    # Always use full dataset for trend (but apply filters)
+    base_trend_df = df.copy()
+    if age_groups:
+        base_trend_df = base_trend_df[base_trend_df['AgeBand'].isin(age_groups)]
+    if setting:
+        base_trend_df = base_trend_df[base_trend_df['SupportSetting'] == setting]
+    if reason:
+        base_trend_df = base_trend_df[base_trend_df['PrimarySupportReason'] == reason]
+
+    # England average of all Local Authorities (filtered)
+    england_las_df = base_trend_df[base_trend_df['GEOGRAPHY_LEVEL'] == 'Local Authority']
+    england_avg = (
+        england_las_df
+        .groupby('FY_ENDING')['ITEMVALUE']
+        .mean()
+        .reset_index()
+        .rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'})
+        .to_dict(orient='records')
+    )
+
+    la = []
+    region = []
+
+    if selected_la:
+        la_df = base_trend_df[base_trend_df['DH_GEOGRAPHY_NAME'] == selected_la]
+        la = get_trend(la_df)
+
+        # Find region name of selected LA
+        region_name_arr = df[
+            (df['DH_GEOGRAPHY_NAME'] == selected_la) & 
+            (df['GEOGRAPHY_LEVEL'] == 'Local Authority')
+        ]['GEOGRAPHY_NAME'].dropna().unique()
+
+        if len(region_name_arr) > 0:
+            region_name = region_name_arr[0]
+
+            # Get list of other LAs in same region
+            region_las = df[
+                (df['GEOGRAPHY_NAME'] == region_name) &
+                (df['GEOGRAPHY_LEVEL'] == 'Local Authority')
+            ]['DH_GEOGRAPHY_NAME'].unique()
+
+            # Filter for those LAs in the base trend df
+            region_df = base_trend_df[base_trend_df['DH_GEOGRAPHY_NAME'].isin(region_las)]
+
+            region = (
+                region_df
+                .groupby('FY_ENDING')['ITEMVALUE']
+                .mean()
+                .reset_index()
+                .rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'})
+                .to_dict(orient='records')
+            )
+
+    print("FILTERED LA:", selected_la, "| REGION:", region, "| LA Trend Rows:", len(la), "| Region Trend Rows:", len(region))
+
+    return jsonify({
+        'benchmark': benchmark,
+        'england': england_avg,
+        'region': region,
+        'la': la
+    })
+
+    
 # === Run the app ===
 if __name__ == '__main__':
     app.run(debug=True)
