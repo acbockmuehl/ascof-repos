@@ -14,6 +14,65 @@ measures_df = pd.read_csv('data/measures.csv')
 ons_df = pd.read_csv('data/ons_codes.csv')
 direction_df = pd.read_csv('data/measure_direction.csv')  # contains 'Measure Group Description', 'Direction'
 df_trend_full = pd.read_csv('data/trend_data.csv')  # trend data 2017–2024
+population_raw = pd.read_csv("data/ons_population_data.csv")
+
+measures_df = pd.read_csv('data/measures.csv')
+ons_df = pd.read_csv('data/ons_codes.csv')
+direction_df = pd.read_csv('data/measure_direction.csv')  # contains 'Measure Group Description', 'Direction'
+df_trend_full = pd.read_csv('data/trend_data.csv')  # trend data 2017–2024
+population_raw = pd.read_csv("data/ons_population_data.csv")
+
+# === Preprocess Population Data ===
+population_raw['AREA_CODE'] = population_raw['AREA_CODE'].astype(str).str.strip()
+
+# Ensure 'SEX' column exists and 'persons' is the correct value for total population by age band
+if 'SEX' in population_raw.columns:
+    population_raw = population_raw[population_raw["SEX"] == "persons"]
+
+# Filter out 'All ages' as it's not a specific band for our age group calculations
+population_raw = population_raw[population_raw['AGE_GROUP'] != 'All ages']
+
+population_raw["2025"] = pd.to_numeric(population_raw["2025"], errors='coerce').fillna(0)
+
+def get_min_age_from_ons_band(band_str):
+    band_str = str(band_str).strip()
+    if "and over" in band_str: # Handles "90 and over"
+        return int(band_str.split(' ')[0])
+    try:
+        return int(band_str)
+    except ValueError:
+        return -1 # Indicates an unparsable or irrelevant band
+
+population_raw['MinAge'] = population_raw['AGE_GROUP'].apply(get_min_age_from_ons_band)
+
+# Population for 18-64: Sum ONS bands where min_age is between 18 and 64.
+# The current get_min_age_from_ons_band is a simplification.
+# A truly accurate solution might require disaggregating ONS population data to single years of age first.
+# For now, we proceed with the min_age logic, assuming it's a reasonable proxy or ONS bands align well.
+
+pop_18_64_df = population_raw[
+    (population_raw['MinAge'] >= 18) & (population_raw['MinAge'] <= 64)
+].groupby('AREA_CODE')['2025'].sum().reset_index().rename(
+    columns={'AREA_CODE': 'GEOGRAPHY_CODE', '2025': 'Population_18_64'}
+)
+
+pop_65_plus_df = population_raw[
+    population_raw['MinAge'] >= 65
+].groupby('AREA_CODE')['2025'].sum().reset_index().rename(
+    columns={'AREA_CODE': 'GEOGRAPHY_CODE', '2025': 'Population_65_plus'}
+)
+
+pop_total_adults_df = population_raw[
+    population_raw['MinAge'] >= 18
+].groupby('AREA_CODE')['2025'].sum().reset_index().rename(
+    columns={'AREA_CODE': 'GEOGRAPHY_CODE', '2025': 'Population_Total_Adults'}
+)
+
+population_prepared_df = pop_total_adults_df.merge(
+    pop_18_64_df, on='GEOGRAPHY_CODE', how='outer'
+).merge(
+    pop_65_plus_df, on='GEOGRAPHY_CODE', how='outer'
+).fillna(0)
 
 # === Preprocess static summary data ===
 df = measures_df[
@@ -196,8 +255,53 @@ def generate_mistral_summary(df, council_name):
 
 # Load cost data
 cost_df = pd.read_csv("data/grosscurrentexpenditure.csv")
+cost_df['GEOGRAPHY_CODE'] = cost_df['GEOGRAPHY_CODE'].astype(str).str.strip()
 cost_df['ITEMVALUE'] = pd.to_numeric(cost_df['ITEMVALUE'], errors='coerce')
 cost_df['ITEMVALUE'] = cost_df['ITEMVALUE'].apply(lambda x: x if x >= 0 else np.nan)
+
+def calculate_per_100k(df_to_calculate, population_source_df, age_groups_list, 
+                       item_value_col='ITEMVALUE', geo_code_col='GEOGRAPHY_CODE'):
+    """
+    Calculates 'per 100k' population for item_value_col in df_to_calculate.
+    Assumes df_to_calculate has one row per geography for the period being calculated.
+    """
+    if df_to_calculate.empty:
+        # Ensure ITEMVALUE column exists even if empty, to prevent downstream errors
+        if item_value_col not in df_to_calculate.columns:
+             df_to_calculate[item_value_col] = pd.Series(dtype='float64')
+        return df_to_calculate
+
+    merged_df = df_to_calculate.merge(population_source_df, on=geo_code_col, how='left')
+
+    # Initialize Population_to_use with NaN, to be filled based on age_groups_list
+    merged_df['Population_to_use'] = np.nan
+
+    if not age_groups_list:  # No specific age group filter from request (e.g. "Total" costs)
+        merged_df['Population_to_use'] = merged_df['Population_Total_Adults']
+    elif len(age_groups_list) == 1:
+        if age_groups_list[0] == "18 to 64":
+            merged_df['Population_to_use'] = merged_df['Population_18_64']
+        elif age_groups_list[0] == "65 and over":
+            merged_df['Population_to_use'] = merged_df['Population_65_plus']
+        else: # Fallback if a single, unexpected age group is passed
+            merged_df['Population_to_use'] = merged_df['Population_Total_Adults']
+    elif set(age_groups_list) == {"18 to 64", "65 and over"}: # Both standard adult groups selected
+        # Costs are summed for both, so population is sum of both (i.e., total adults)
+        merged_df['Population_to_use'] = merged_df['Population_Total_Adults']
+    else: # Multiple age groups, but not the standard combined adult set, or unexpected values
+          # This case implies the cost data was filtered by these specific multiple age_groups.
+          # For simplicity, if it's not a recognized single or combined group, default to Total_Adults.
+          # A more granular approach would require summing specific population bands if they were pre-calculated.
+        merged_df['Population_to_use'] = merged_df['Population_Total_Adults']
+
+    # Ensure population columns used for calculation exist and fill NaNs from merge if any LA was missing population data
+    for pop_col in ['Population_Total_Adults', 'Population_18_64', 'Population_65_plus', 'Population_to_use']:
+        if pop_col in merged_df.columns:
+            merged_df[pop_col] = merged_df[pop_col].fillna(0)
+
+    merged_df[item_value_col] = merged_df[item_value_col] / (merged_df['Population_to_use'].replace(0, np.nan) / 100000.0)
+    merged_df[item_value_col].replace([np.inf, -np.inf], np.nan, inplace=True)
+    return merged_df
 
 @app.route('/cost-data')
 def cost_data():
@@ -207,6 +311,7 @@ def cost_data():
     age_groups = request.args.getlist('age_groups[]')
     setting = request.args.get('support_setting', 'Total')
     reason = request.args.get('primary_support_reason', 'Total')
+    display_mode = request.args.get('display_mode', 'total')  # 'total' or 'per_100k'
 
     # Copy the full dataset for filtering
     df = cost_df.copy()
@@ -227,26 +332,23 @@ def cost_data():
     benchmark_df = benchmark_df[benchmark_df['FY_ENDING'] == latest_year]
 
     benchmark_data = (
-        benchmark_df.groupby('DH_GEOGRAPHY_NAME', as_index=False)['ITEMVALUE']
+        benchmark_df.groupby(['DH_GEOGRAPHY_NAME', 'GEOGRAPHY_CODE'], as_index=False)['ITEMVALUE']
         .sum()
-        .dropna()
+        .dropna(subset=['ITEMVALUE']) 
         .sort_values(by='ITEMVALUE', ascending=False)
     )
 
+    if display_mode == 'per_100k':
+        benchmark_data = calculate_per_100k(benchmark_data, population_prepared_df, age_groups, item_value_col='ITEMVALUE', geo_code_col='GEOGRAPHY_CODE')
+        # Re-sort after per 100k calculation to maintain Pareto order
+        benchmark_data.sort_values(by='ITEMVALUE', ascending=False, inplace=True)
+
     benchmark = [
-        {'Geographical Description': row['DH_GEOGRAPHY_NAME'], 'Measure_Value': round(row['ITEMVALUE'], 2)}
+        {'Geographical Description': row['DH_GEOGRAPHY_NAME'], 'Measure_Value': round(row['ITEMVALUE'], 2) if pd.notna(row['ITEMVALUE']) else None}
         for _, row in benchmark_data.iterrows()
     ]
 
-    # === Build trend lines using full dataset ===
-    def get_trend(df_subset):
-        if df_subset.empty:
-            return []
-        trend = df_subset.groupby('FY_ENDING', as_index=False)['ITEMVALUE'].sum()
-        trend.rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'}, inplace=True)
-        return trend.to_dict(orient='records')
-
-    # Always use full dataset for trend (but apply filters)
+    # === Build trend lines ===
     base_trend_df = df.copy()
     if age_groups:
         base_trend_df = base_trend_df[base_trend_df['AgeBand'].isin(age_groups)]
@@ -255,58 +357,85 @@ def cost_data():
     if reason:
         base_trend_df = base_trend_df[base_trend_df['PrimarySupportReason'] == reason]
 
-    # England average of all Local Authorities (filtered)
-    england_las_df = base_trend_df[base_trend_df['GEOGRAPHY_LEVEL'] == 'Local Authority']
-    england_avg = (
-        england_las_df
-        .groupby('FY_ENDING')['ITEMVALUE']
-        .mean()
-        .reset_index()
-        .rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'})
-        .to_dict(orient='records')
-    )
+    # --- England Average Trend ---
+    england_las_trend_base = base_trend_df[base_trend_df['GEOGRAPHY_LEVEL'] == 'Local Authority'].copy()
+    # Sum ITEMVALUE per LA per Year
+    england_la_yearly_sum = england_las_trend_base.groupby(['FY_ENDING', 'GEOGRAPHY_CODE', 'DH_GEOGRAPHY_NAME'])['ITEMVALUE'].sum().reset_index()
+    if display_mode == 'per_100k':
+               england_la_yearly_sum = calculate_per_100k(england_la_yearly_sum, population_prepared_df, age_groups, 
+                                                   item_value_col='ITEMVALUE', geo_code_col='GEOGRAPHY_CODE')
 
-    la = []
-    region = []
+    england_avg_trend = england_la_yearly_sum.groupby('FY_ENDING')['ITEMVALUE'].mean().reset_index()
+    england_avg_trend.rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'}, inplace=True)
+    england_avg_trend['Measure_Value'] = england_avg_trend['Measure_Value'].round(2)
+    england_avg = england_avg_trend.to_dict(orient='records')
 
+    # --- LA Trend ---
+    la_trend_data = []
     if selected_la:
-        la_df = base_trend_df[base_trend_df['DH_GEOGRAPHY_NAME'] == selected_la]
-        la = get_trend(la_df)
+        la_df_abs = base_trend_df[base_trend_df['DH_GEOGRAPHY_NAME'] == selected_la].copy()
+        la_yearly_sum = la_df_abs.groupby(['FY_ENDING', 'GEOGRAPHY_CODE'])['ITEMVALUE'].sum().reset_index()
 
-        # Find region name of selected LA
-        region_name_arr = df[
-            (df['DH_GEOGRAPHY_NAME'] == selected_la) & 
-            (df['GEOGRAPHY_LEVEL'] == 'Local Authority')
-        ]['GEOGRAPHY_NAME'].dropna().unique()
+        if display_mode == 'per_100k':
+            la_yearly_sum = calculate_per_100k(la_yearly_sum, population_prepared_df, age_groups, 
+                                               item_value_col='ITEMVALUE', geo_code_col='GEOGRAPHY_CODE')
+        
+        la_yearly_sum.rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'}, inplace=True)
+        la_yearly_sum['Measure_Value'] = la_yearly_sum['Measure_Value'].round(2)
+        la_trend_data = la_yearly_sum[['Year', 'Measure_Value']].to_dict(orient='records')
 
-        if len(region_name_arr) > 0:
-            region_name = region_name_arr[0]
+    # --- Region Trend ---
+    region_trend_data = []
+    # Determine region_name based on selected_la (if provided) or selected_region (if provided directly)
+    # This part of logic for finding region_name and region_las needs to be robust
+    # For this example, we'll assume selected_la implies the region.
+    # If 'region' is a direct filter from request.args.get('region'), that should be used.
+    # The current code derives region from selected_la if selected_la is present.
 
-            # Get list of other LAs in same region
-            region_las = df[
-                (df['GEOGRAPHY_NAME'] == region_name) &
-                (df['GEOGRAPHY_LEVEL'] == 'Local Authority')
-            ]['DH_GEOGRAPHY_NAME'].unique()
+    actual_region_name = None
+    if selected_la:
+        # Find region name of selected LA from df_outcomes (which has 'Council region')
+        la_info = df_outcomes[df_outcomes['Geographical Description'].str.strip().str.lower() == selected_la.strip().lower()]
+        if not la_info.empty and 'Council region' in la_info.columns:
+            actual_region_name = la_info['Council region'].dropna().unique()
+            if len(actual_region_name) > 0:
+                actual_region_name = actual_region_name[0]
+            else:
+                actual_region_name = None
+    elif request.args.get('region'): # if region is passed as a direct filter
+        actual_region_name = request.args.get('region').strip()
 
-            # Filter for those LAs in the base trend df
-            region_df = base_trend_df[base_trend_df['DH_GEOGRAPHY_NAME'].isin(region_las)]
+    if actual_region_name:
+        # Get list of LAs in the determined region from cost_df's GEOGRAPHY_NAME (assuming it's region name)
+        # or from a mapping if GEOGRAPHY_NAME in cost_df is not region name.
+        # The original code used df_outcomes to find LAs in a region, which is better.
+        region_las_geo_desc = df_outcomes[
+            df_outcomes['Council region'] == actual_region_name
+        ]['Geographical Description'].unique()
 
-            region = (
-                region_df
-                .groupby('FY_ENDING')['ITEMVALUE']
-                .mean()
-                .reset_index()
-                .rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'})
-                .to_dict(orient='records')
-            )
+        region_df_abs = base_trend_df[base_trend_df['DH_GEOGRAPHY_NAME'].isin(region_las_geo_desc)].copy()
+        
+        if not region_df_abs.empty:
+            region_la_yearly_sum = region_df_abs.groupby(['FY_ENDING', 'GEOGRAPHY_CODE', 'DH_GEOGRAPHY_NAME'])['ITEMVALUE'].sum().reset_index()
 
-    print("FILTERED LA:", selected_la, "| REGION:", region, "| LA Trend Rows:", len(la), "| Region Trend Rows:", len(region))
+            if display_mode == 'per_100k':
+                region_la_yearly_sum = calculate_per_100k(region_la_yearly_sum, population_prepared_df, age_groups,
+                                                          item_value_col='ITEMVALUE', geo_code_col='GEOGRAPHY_CODE')
+            
+            region_avg_trend = region_la_yearly_sum.groupby('FY_ENDING')['ITEMVALUE'].mean().reset_index()
+            region_avg_trend.rename(columns={'FY_ENDING': 'Year', 'ITEMVALUE': 'Measure_Value'}, inplace=True)
+            region_avg_trend['Measure_Value'] = region_avg_trend['Measure_Value'].round(2)
+            region_trend_data = region_avg_trend.to_dict(orient='records')
+
+
+    print(f"FILTERED LA: {selected_la} | AGE_GROUPS: {age_groups} | DISPLAY_MODE: {display_mode}")
+    print(f"Benchmark LAs: {len(benchmark)}, England Trend Points: {len(england_avg)}, LA Trend Points: {len(la_trend_data)}, Region Trend Points: {len(region_trend_data)}")
 
     return jsonify({
         'benchmark': benchmark,
         'england': england_avg,
-        'region': region,
-        'la': la
+        'region': region_trend_data,
+        'la': la_trend_data
     })
 
     

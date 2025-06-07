@@ -375,6 +375,8 @@ function fetchAndRenderCostCharts() {
   const ageGroups = Array.from(document.getElementById('costFilterAge').selectedOptions).map(o => o.value);
   const setting = document.getElementById('costFilterSetting').value;
   const reason  = document.getElementById('costFilterReason').value;
+  const displayMode = document.getElementById('costDisplayMode').value;
+
 
   // 2️⃣ Build querystring -----------------------------------------------------
   const params = new URLSearchParams();
@@ -383,6 +385,7 @@ function fetchAndRenderCostCharts() {
   ageGroups.forEach(g => params.append('age_groups[]', g));
   if (setting) params.append('support_setting', setting);
   if (reason)  params.append('primary_support_reason', reason);
+  params.append('display_mode', displayMode);                            
 
   // 3️⃣ Fetch & render --------------------------------------------------------
   fetch(`/cost-data?${params.toString()}`)
@@ -527,7 +530,8 @@ function attachCostFilterListeners() {
     'costFilterRegion',
     'costFilterAge',
     'costFilterSetting',
-    'costFilterReason'
+    'costFilterReason',
+    'costDisplayMode'
   ];
 
   selectors.forEach(id => {
