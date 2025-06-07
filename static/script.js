@@ -108,7 +108,7 @@ function fetchAndRender({ skipTable = false } = {}) {
         updateLATable(selectedHighlight || '');
       }
       fetchTrendData();  // also update trend graph
-      populateCostFilterOptions();
+      populateCostFilterOptions(); // This is the correct place to call this
     });
 }
 
@@ -352,7 +352,7 @@ window.onload = function () {
   const initialMeasure = document.getElementById('measureSelect').value;
   console.log('Initial measure:', initialMeasure);
 
-  populateCostFilterOptions(); // populate LA and Region filters first
+  // populateCostFilterOptions(); // <-- This was the problem. Removed.
   attachCostFilterListeners(); // hook up all filter change handlers
   updateDisaggregationOptions(initialMeasure);
   fetchAndRender(); // for ASCOF tab
@@ -396,10 +396,13 @@ function fetchAndRenderCostCharts() {
       // ───────────────────────────────────────────────────────────
       //  COMMON FORMATTERS → £000s → £Xm
       // ───────────────────────────────────────────────────────────
-      const toMillions = v => v / 1_000;                       // 1k ➜ 1m
-      const tickFmt = v => `£${toMillions(v).toLocaleString()} m`;
-      const tooltipFmt = raw =>
-        `£${toMillions(raw).toFixed(raw >= 100_000 ? 0 : raw >= 10_000 ? 1 : 2)} m`;
+      const toMillions = v => v / 1_000; // Corrected to millions
+      const tickFmt = v => `£${v.toLocaleString()}m`;
+      const tooltipFmt = raw => {
+          const millions = toMillions(raw);
+          return `£${millions.toFixed(millions >= 100 ? 0 : millions >= 10 ? 1 : 2)}m`;
+      };
+
 
       // ───────────────────────────────────────────────────────────
       //  BENCHMARK  BAR  CHART
@@ -408,7 +411,7 @@ function fetchAndRenderCostCharts() {
       if (costBenchmarkChart) costBenchmarkChart.destroy();
 
       const labels = data.benchmark.map(d => d['Geographical Description']);
-      const values = data.benchmark.map(d => d['Measure_Value']);
+      const values = data.benchmark.map(d => toMillions(d['Measure_Value'])); // Convert to millions for chart
       const selectedLA = la;
 
       const backgroundColors = labels.map(label =>
@@ -422,7 +425,7 @@ function fetchAndRenderCostCharts() {
         data: {
           labels,
           datasets: [{
-            label: '£ m',               // legend label
+            label: '£m',               // legend label
             data: values,
             backgroundColor: backgroundColors
           }]
@@ -433,7 +436,7 @@ function fetchAndRenderCostCharts() {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: ctx => tooltipFmt(ctx.parsed.y)
+                 label: ctx => `£${ctx.parsed.y.toFixed(2)}m`
               }
             }
           },
@@ -458,7 +461,7 @@ function fetchAndRenderCostCharts() {
 
       const buildSeries = (label, entries, color) => ({
         label,
-        data: entries.map(d => ({ x: d.Year, y: d.Measure_Value })),
+        data: entries.map(d => ({ x: d.Year, y: toMillions(d.Measure_Value) })), // Convert to millions for chart
         borderColor: color,
         backgroundColor: color,
         tension: 0.3,
@@ -496,7 +499,7 @@ function fetchAndRenderCostCharts() {
               mode: 'index',
               intersect: false,
               callbacks: {
-                label: ctx => tooltipFmt(ctx.parsed.y)
+                label: ctx => `${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}m`
               }
             }
           },
@@ -594,73 +597,66 @@ function updateSubtitle() { /* no-op */ }
 
 // Populate LA and Region filter options dynamically from existing dropdowns
 function populateCostFilterOptions() {
-  const laSelect     = document.getElementById('costFilterLA');
+  const laSelect = document.getElementById('costFilterLA');
   const regionSelect = document.getElementById('costFilterRegion');
 
-  // --- Gather every LA + its region from the hidden ASCOF dropdown ----------
+  let laTomSelect;
+
+  // Gather LA + region from hidden ASCOF list
   const allLAs = Array.from(document.querySelectorAll('#highlightSelect option'))
     .map(opt => ({
-      name  : opt.value,
+      name: opt.value,
       region: opt.getAttribute('data-region')?.trim() || ''
     }))
-    .filter(o => o.name);                         // skip empty option
+    .filter(o => o.name); // exclude empty options
 
   const allRegions = Array.from(new Set(allLAs.map(o => o.region)))
-    .filter(Boolean)                              // drop blanks
+    .filter(Boolean)
     .sort();
 
-  // --- Build Region dropdown ------------------------------------------------
-  regionSelect.innerHTML = '';                    // reset
-  regionSelect.appendChild(new Option('All', ''));   // default first row
+  // Build region filter
+  regionSelect.innerHTML = '';
+  regionSelect.appendChild(new Option('All', ''));
   allRegions.forEach(r => regionSelect.appendChild(new Option(r, r)));
 
-  // --- Helper to (re)populate the LA dropdown ------------------------------
-  const renderLAs = (list) => {
-    laSelect.innerHTML = '';
-    laSelect.appendChild(new Option('None', ''));    // first row
-    list
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .forEach(({ name, region }) => {
-        const opt = new Option(name, name);
-        opt.setAttribute('data-region', region);
-        laSelect.appendChild(opt);
-      });
+  // Render LA list via TomSelect
+  const renderLAs = (list, selectedLA = '') => {
+    if (laTomSelect) laTomSelect.destroy();
+
+    laTomSelect = new TomSelect(laSelect, {
+      valueField: 'name',
+      labelField: 'name',
+      searchField: 'name',
+      placeholder: 'Select a local authority...',
+      options: list.map(o => ({
+        name: o.name,
+        region: o.region
+      })),
+      items: selectedLA ? [selectedLA] : [],
+      sortField: { field: 'name', direction: 'asc' }
+    });
   };
 
-  // Initial render: show *all* LAs
+  // Initial load
   renderLAs(allLAs);
 
-  // --------------------------------------------------------------------------
-  // REGION change logic
-  //   • Filters the LA list to councils inside the chosen region.
-  //   • Clears LA selection if it’s no longer valid.
-  //   • Triggers chart refresh.
-  // --------------------------------------------------------------------------
+  // Region change = filter LA list
   regionSelect.addEventListener('change', () => {
-    const region = regionSelect.value;            // '' means All
-    const currentLA = laSelect.value;
+    const region = regionSelect.value;
+    const selectedLA = laTomSelect.getValue();
 
     const filteredLAs = region
       ? allLAs.filter(o => o.region === region)
       : allLAs;
 
-    renderLAs(filteredLAs);
+    const stillValid = filteredLAs.some(o => o.name === selectedLA);
+    renderLAs(filteredLAs, stillValid ? selectedLA : '');
 
-    if (!filteredLAs.some(o => o.name === currentLA)) {
-      laSelect.value = '';                        // reset LA if out of scope
-    }
-
-    // 🔄 Refresh charts with the new region filter
     fetchCostDebounced();
   });
 
-  // --------------------------------------------------------------------------
-  // LA change logic
-  //   • Simply refreshes charts with the chosen LA.
-  //   • Does NOT touch the Region dropdown.
-  // --------------------------------------------------------------------------
-  //laSelect.addEventListener('change', () => {
-    // (Optional) updateSubtitle?.();
-    //fetchCostDebounced();
-  //});
+  // LA selection change
+  laSelect.addEventListener('change', () => {
+    fetchCostDebounced();
+  });
 }
